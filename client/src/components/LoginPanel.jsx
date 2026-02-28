@@ -20,11 +20,11 @@ export function LoginPanel({ onLoggedIn, onLoggedOut }) {
     setLoading(true);
     setError("");
     try {
-      await ApiClient.login(totp);   // <--- IMPORTANT
+      await ApiClient.login(totp);
       await refresh();
-      onLoggedIn();
+      onLoggedIn && onLoggedIn();
     } catch (e) {
-      setError(e.response?.data?.error || e.message || "Login failed");
+      setError(e?.response?.data?.error || e.message || "Login failed");
     } finally {
       setLoading(false);
     }
@@ -36,9 +36,9 @@ export function LoginPanel({ onLoggedIn, onLoggedOut }) {
     try {
       await ApiClient.logout();
       await refresh();
-      onLoggedOut();
+      onLoggedOut && onLoggedOut();
     } catch (e) {
-      setError(e.response?.data?.error || e.message || "Logout failed");
+      setError(e?.response?.data?.error || e.message || "Logout failed");
     } finally {
       setLoading(false);
     }
@@ -49,7 +49,7 @@ export function LoginPanel({ onLoggedIn, onLoggedOut }) {
       <h2>Kotak Neo Login (TOTP)</h2>
 
       <div className="form-row">
-        abel>TOTP</label>
+        <label>TOTP</label>
         <input
           value={totp}
           onChange={(e) => setTotp(e.target.value)}
