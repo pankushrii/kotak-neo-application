@@ -3,11 +3,9 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "dev:server": "node api/index.js",
+    "dev:server": "NODE_ENV=development node api/index.js",
     "dev:client": "cd client && npm run dev",
-    "dev": "npm run dev:client",
-    "build": "cd client && npm install && npm run build",
-    "start": "node api/index.js"
+    "build:client": "cd client && npm install && npm run build"
   },
   "dependencies": {
     "axios": "^1.7.0",
