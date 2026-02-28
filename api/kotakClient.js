@@ -1,4 +1,3 @@
-// api/kotakClient.js
 const axios = require("axios");
 const { apiConfig } = require("./kotakConfig");
 const { setSession, getSession } = require("./sessionStore");
@@ -7,49 +6,49 @@ const FIXED_LOGIN_BASE = "https://mis.kotaksecurities.com";
 const TOTP_LOGIN_URL = `${FIXED_LOGIN_BASE}/login/1.0/tradeApiLogin`;
 const MPIN_VALIDATE_URL = `${FIXED_LOGIN_BASE}/login/1.0/tradeApiValidate`;
 
-function commonHeaders() {
-  // Migration guide: access token is plain token (no Bearer).[page:2]
-  // We also pass neoFinKey as a separate header (name may vary in your Notion doc).
+// Access-token headers (short token from Neo dashboard)
+function accessHeaders() {
   return {
     "Content-Type": "application/json",
     Accept: "application/json",
+    // v2 migration: use plain token (no Bearer) in Authorization for access token.[web:46]
     Authorization: apiConfig.accessToken,
     "neo-fin-key": apiConfig.neoFinKey
   };
 }
 
-// Step 1: TOTP Login
+// Step 1: TOTP login (uses Authorization = accessToken)
 async function totpLogin(totp) {
-  // .NET wrapper indicates request has Ucc, MobileNumber, Totp.[web:62]
   const payload = {
     ucc: apiConfig.ucc,
     mobileNumber: apiConfig.mobileNumber,
     totp: String(totp)
   };
 
-  const res = await axios.post(TOTP_LOGIN_URL, payload, {
-    headers: commonHeaders()
-  });
+  const res = await axios.post(TOTP_LOGIN_URL, payload, { headers: accessHeaders() });
 
-  // Expect token+sid in response data (pre-auth). This mirrors public SDK samples.[web:62]
-  const preAuthToken = res?.data?.data?.token || res?.data?.data?.Token || res?.data?.token;
-  const preAuthSid = res?.data?.data?.sid || res?.data?.data?.Sid || res?.data?.sid;
+  const preAuthToken =
+    res?.data?.data?.token || res?.data?.data?.Token || res?.data?.token;
+  const preAuthSid =
+    res?.data?.data?.sid || res?.data?.data?.Sid || res?.data?.sid;
 
-  if (!preAuthToken) throw new Error("TOTP login succeeded but token missing in response");
+  if (!preAuthToken) throw new Error("TOTP login: token missing in response");
   return { preAuthToken, preAuthSid };
 }
 
-// Step 2: MPIN Validate => final session token + baseUrl
+// Step 2: MPIN validate
+// IMPORTANT: Send the preAuthToken in header `Auth` (NOT Authorization)
 async function mpinValidate({ preAuthToken, preAuthSid }) {
-  const payload = { mpin: apiConfig.mpin };
+  if (!apiConfig.mpin) throw new Error("MPIN is not set in api/kotakConfig.js");
+
+  const payload = { mpin: String(apiConfig.mpin) };
 
   const headers = {
-    ...commonHeaders(),
-    Authorization: preAuthToken
+    ...accessHeaders(),
+    Auth: preAuthToken // <-- THIS FIXES "Missing required field 'Auth'"
   };
 
-  // Some implementations require sid header on validate.[web:62]
-  if (preAuthSid) headers["sid"] = preAuthSid;
+  if (preAuthSid) headers.sid = preAuthSid;
 
   const res = await axios.post(MPIN_VALIDATE_URL, payload, { headers });
 
@@ -57,9 +56,7 @@ async function mpinValidate({ preAuthToken, preAuthSid }) {
   const sid = res?.data?.data?.sid || res?.data?.sid;
   const baseUrl = res?.data?.data?.baseUrl || res?.data?.baseUrl;
 
-  if (!token || !baseUrl) {
-    throw new Error("MPIN validate response missing token/baseUrl");
-  }
+  if (!token || !baseUrl) throw new Error("MPIN validate: token/baseUrl missing");
 
   setSession({ token, sid, baseUrl });
   return { token, sid, baseUrl };
@@ -70,19 +67,20 @@ async function loginWithTotp(totp) {
   return mpinValidate({ preAuthToken, preAuthSid });
 }
 
+// For order/report/positions APIs (dynamic baseUrl)
+// Migration guide: call using baseUrl, and for these APIs drop Authorization header.[web:46]
 function sessionHeaders() {
   const { sessionToken, sessionSid } = getSession();
-  if (!sessionToken) throw new Error("No sessionToken. Call /api/auth/login first.");
+  if (!sessionToken) throw new Error("No session. Call /api/auth/login first.");
 
-  // Migration says use baseUrl for APIs and plain token approach.[page:2]
   const headers = {
     "Content-Type": "application/json",
     Accept: "application/json",
-    Authorization: sessionToken,
-    "neo-fin-key": apiConfig.neoFinKey
+    "neo-fin-key": apiConfig.neoFinKey,
+    Auth: sessionToken
   };
 
-  if (sessionSid) headers["sid"] = sessionSid;
+  if (sessionSid) headers.sid = sessionSid;
   return headers;
 }
 
@@ -92,24 +90,23 @@ function baseUrlOrThrow() {
   return baseUrl;
 }
 
-// v2 endpoints from migration guide.[page:2]
 async function placeOrder(payload) {
   const baseUrl = baseUrlOrThrow();
-  const url = `${baseUrl}/quick/order/rule/ms/place`;
+  const url = `${baseUrl}/quick/order/rule/ms/place`; // v2 endpoint[web:46]
   const res = await axios.post(url, payload, { headers: sessionHeaders() });
   return res.data;
 }
 
 async function getOrders() {
   const baseUrl = baseUrlOrThrow();
-  const url = `${baseUrl}/quick/user/orders`;
+  const url = `${baseUrl}/quick/user/orders`; // v2 endpoint[web:46]
   const res = await axios.get(url, { headers: sessionHeaders() });
   return res.data;
 }
 
 async function getPositions() {
   const baseUrl = baseUrlOrThrow();
-  const url = `${baseUrl}/quick/user/positions`;
+  const url = `${baseUrl}/quick/user/positions`; // v2 endpoint[web:46]
   const res = await axios.get(url, { headers: sessionHeaders() });
   return res.data;
 }
