@@ -5,7 +5,7 @@ const apiConfigs = {
     neoFinKey: "neotradeapi",
     mobileNumber: "+917000560918",
     ucc: "YIVKF",
-    mpin: "1234" // <-- SET YOUR MPIN HERE (keep hardcoded)
+    mpin: "190990" // <-- SET YOUR MPIN HERE (keep hardcoded)
   }
 };
 
