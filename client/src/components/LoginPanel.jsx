@@ -2,57 +2,43 @@ import React, { useState, useEffect } from "react";
 import { ApiClient } from "../apiClient";
 
 export function LoginPanel({ onLoggedIn, onLoggedOut }) {
-  const [tradingToken, setTradingToken] = useState("");
-  const [tradingSid, setTradingSid] = useState("");
-  const [baseUrl, setBaseUrl] = useState("");
+  const [totp, setTotp] = useState("");
   const [loading, setLoading] = useState(false);
   const [hasSession, setHasSession] = useState(false);
-  const [lastLoginAt, setLastLoginAt] = useState(null);
   const [error, setError] = useState("");
 
-  const loadSession = async () => {
-    try {
-      const s = await ApiClient.getSession();
-      setHasSession(s.hasSession);
-      setLastLoginAt(s.lastLoginAt);
-    } catch (e) {
-      // ignore
-    }
+  const refresh = async () => {
+    const s = await ApiClient.getSession();
+    setHasSession(!!s.hasSession);
   };
 
   useEffect(() => {
-    loadSession();
+    refresh().catch(() => {});
   }, []);
 
-  const handleSetSession = async () => {
+  const login = async () => {
     setLoading(true);
     setError("");
     try {
-      await ApiClient.setSession({ tradingToken, tradingSid, baseUrl });
-      setHasSession(true);
-      setLastLoginAt(Date.now());
+      await ApiClient.login(totp);
+      await refresh();
       onLoggedIn();
     } catch (e) {
-      setError(
-        e.response?.data?.error ||
-          e.message ||
-          "Failed to set trading session."
-      );
+      setError(e.response?.data?.error || e.message || "Login failed");
     } finally {
       setLoading(false);
     }
   };
 
-  const handleLogout = async () => {
+  const logout = async () => {
     setLoading(true);
     setError("");
     try {
       await ApiClient.logout();
-      setHasSession(false);
-      setLastLoginAt(null);
+      await refresh();
       onLoggedOut();
     } catch (e) {
-      setError(e.response?.data?.error || e.message || "Logout failed.");
+      setError(e.response?.data?.error || e.message || "Logout failed");
     } finally {
       setLoading(false);
     }
@@ -60,62 +46,30 @@ export function LoginPanel({ onLoggedIn, onLoggedOut }) {
 
   return (
     <div className="card">
-      <h2>Kotak Neo Session</h2>
-
-      <p className="caption">
-        Paste your <strong>TRADING_TOKEN</strong>, <strong>TRADING_SID</strong>{" "}
-        and <strong>BASE_URL</strong> from your daily TOTP + MPIN login script.
-      </p>
+      <h2>Kotak Neo Login (TOTP)</h2>
 
       <div className="form-row">
-        <label>TRADING_TOKEN</label>
+        <label>TOTP</label>
         <input
-          value={tradingToken}
-          onChange={(e) => setTradingToken(e.target.value)}
-          placeholder="eyJhbGciOi..."
-        />
-      </div>
-
-      <div className="form-row">
-        <label>TRADING_SID</label>
-        <input
-          value={tradingSid}
-          onChange={(e) => setTradingSid(e.target.value)}
-          placeholder="uuid / sid"
-        />
-      </div>
-
-      <div className="form-row">
-        <label>BASE_URL</label>
-        <input
-          value={baseUrl}
-          onChange={(e) => setBaseUrl(e.target.value)}
-          placeholder="https://napi.kotaksecurities.com/..."
+          value={totp}
+          onChange={(e) => setTotp(e.target.value)}
+          placeholder="123456"
         />
       </div>
 
       <div className="btn-row">
-        <button onClick={handleSetSession} disabled={loading}>
-          {loading ? "Saving..." : "Set Session"}
+        <button onClick={login} disabled={loading || !totp}>
+          {loading ? "Logging in..." : "Login"}
         </button>
+
         {hasSession && (
-          <button
-            className="secondary"
-            onClick={handleLogout}
-            disabled={loading}
-          >
-            Clear Session
+          <button className="secondary" onClick={logout} disabled={loading}>
+            Logout
           </button>
         )}
       </div>
 
-      {hasSession && (
-        <p className="session-ok">
-          Active session. Last set:{" "}
-          {lastLoginAt ? new Date(lastLoginAt).toLocaleString() : "now"}
-        </p>
-      )}
-
+      {hasSession && <p className="session-ok">Session is active.</p>}
       {error && <p className="error">{error}</p>}
     </div>
   );
