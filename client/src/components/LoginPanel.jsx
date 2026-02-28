@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import { ApiClient } from "../apiClient";
 
 export function LoginPanel({ onLoggedIn, onLoggedOut }) {
@@ -20,7 +20,7 @@ export function LoginPanel({ onLoggedIn, onLoggedOut }) {
     setLoading(true);
     setError("");
     try {
-      await ApiClient.login(totp);
+      await ApiClient.login(totp);   // <--- IMPORTANT
       await refresh();
       onLoggedIn();
     } catch (e) {
@@ -49,7 +49,7 @@ export function LoginPanel({ onLoggedIn, onLoggedOut }) {
       <h2>Kotak Neo Login (TOTP)</h2>
 
       <div className="form-row">
-        <label>TOTP</label>
+        abel>TOTP</label>
         <input
           value={totp}
           onChange={(e) => setTotp(e.target.value)}
