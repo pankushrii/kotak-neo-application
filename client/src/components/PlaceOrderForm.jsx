@@ -13,21 +13,20 @@ export function PlaceOrderForm({ onOrderPlaced }) {
     setLoading(true);
     setMessage("");
     try {
-      if (!symbol || qty <= 0) {
-        setMessage("Please enter valid symbol and quantity.");
-        setLoading(false);
+      if (!symbol || Number(qty) <= 0) {
+        setMessage("Please enter a valid symbol and quantity.");
         return;
       }
 
       const res = await ApiClient.placeOrder({
         trading_symbol: symbol.trim(),
-        quantity: qty,
+        quantity: Number(qty),
         side,
         product
       });
 
       setMessage("Order placed (request accepted).");
-      onOrderPlaced && onOrderPlaced(res);
+      if (onOrderPlaced) onOrderPlaced(res);
     } catch (e) {
       setMessage(e?.response?.data?.error || e.message || "Order placement failed.");
     } finally {
@@ -44,22 +43,26 @@ export function PlaceOrderForm({ onOrderPlaced }) {
 
       <div className="form-grid">
         <div className="form-row">
-          abel>Symbol</label>
-          <input value={symbol} onChange={(e) => setSymbol(e.target.value)} />
-        </div>
-
-        <div className="form-row">
-          abel>Quantity</label>
+          <label>Symbol</label>
           <input
-            type="number"
-            min={1}
-            value={qty}
-            onChange={(e) => setQty(Number(e.target.value))}
+            value={symbol}
+            onChange={(e) => setSymbol(e.target.value)}
+            placeholder="RELIANCE-EQ"
           />
         </div>
 
         <div className="form-row">
-          abel>Side</label>
+          <label>Quantity</label>
+          <input
+            type="number"
+            min={1}
+            value={qty}
+            onChange={(e) => setQty(e.target.value)}
+          />
+        </div>
+
+        <div className="form-row">
+          <label>Side</label>
           <select value={side} onChange={(e) => setSide(e.target.value)}>
             <option value="BUY">Buy</option>
             <option value="SELL">Sell</option>
@@ -67,7 +70,7 @@ export function PlaceOrderForm({ onOrderPlaced }) {
         </div>
 
         <div className="form-row">
-          abel>Product</label>
+          <label>Product</label>
           <select value={product} onChange={(e) => setProduct(e.target.value)}>
             <option value="CNC">CNC</option>
             <option value="MIS">MIS</option>
@@ -82,7 +85,11 @@ export function PlaceOrderForm({ onOrderPlaced }) {
         </button>
       </div>
 
-      {message && <p className={message.includes("failed") ? "error" : "message"}>{message}</p>}
+      {message && (
+        <p className={message.toLowerCase().includes("fail") ? "error" : "message"}>
+          {message}
+        </p>
+      )}
     </div>
   );
 }
