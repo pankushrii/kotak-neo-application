@@ -1,38 +1,42 @@
+// api/index.js
 const express = require("express");
 const cors = require("cors");
-const {
-  kotakLogin,
-  placeOrder,
-  getPositions,
-  getOrders
-} = require("./kotakClient");
+const { clear, getSession } = require("./sessionStore");
+const { loginWithTotp, placeOrder, getOrders, getPositions } = require("./kotakClient");
 
 const app = express();
 app.use(cors({ origin: "*" }));
 app.use(express.json());
 
-app.get("/api/health", (req, res) => {
-  res.json({ ok: true });
-});
+app.get("/api/health", (req, res) => res.json({ ok: true }));
 
-// Login – user passes TOTP from Google Authenticator.
+// Ask only TOTP
 app.post("/api/auth/login", async (req, res) => {
   try {
-    const { totp } = req.body;
-    if (!totp) {
-      return res.status(400).json({ error: "totp is required" });
-    }
-    const data = await kotakLogin({ totp });
+    const { totp } = req.body || {};
+    if (!totp) return res.status(400).json({ error: "totp is required" });
+
+    const data = await loginWithTotp(totp);
     res.json({ success: true, ...data });
   } catch (err) {
-    console.error("Login error", err.response?.data || err.message);
-    res.status(500).json({
-      error: err.response?.data?.message || err.message || "Login failed"
-    });
+    res.status(500).json({ error: err.response?.data || err.message || "Login failed" });
   }
 });
 
-// Place basic market order.
+app.get("/api/auth/session", (req, res) => {
+  const s = getSession();
+  res.json({
+    hasSession: !!(s.sessionToken && s.baseUrl),
+    lastLoginAt: s.lastLoginAt
+  });
+});
+
+app.post("/api/auth/logout", (req, res) => {
+  clear();
+  res.json({ success: true });
+});
+
+// Place order (same payload style as Neo docs: exchange_segment/product/order_type/etc).[page:1]
 app.post("/api/orders", async (req, res) => {
   try {
     const {
@@ -43,49 +47,33 @@ app.post("/api/orders", async (req, res) => {
       product = "CNC",
       order_type = "MKT",
       validity = "DAY"
-    } = req.body;
+    } = req.body || {};
 
     if (!trading_symbol || !quantity || !side) {
-      return res
-        .status(400)
-        .json({ error: "trading_symbol, quantity, side required" });
+      return res.status(400).json({ error: "trading_symbol, quantity, side are required" });
     }
 
     const payload = {
-      trading_symbol,
-      quantity: String(quantity),
-      transaction_type: side === "BUY" ? "B" : "S",
       exchange_segment,
       product,
-      order_type,
-      validity,
       price: "0",
+      order_type,
+      quantity: String(quantity),
+      validity,
+      trading_symbol,
+      transaction_type: side === "BUY" ? "B" : "S",
       amo: "NO",
       disclosed_quantity: "0",
       market_protection: "0",
       pf: "N",
-      trigger_price: "0"
+      trigger_price: "0",
+      tag: null
     };
 
     const data = await placeOrder(payload);
     res.json(data);
   } catch (err) {
-    console.error("Order error", err.response?.data || err.message);
-    res.status(500).json({
-      error: err.response?.data?.message || err.message || "Order failed"
-    });
-  }
-});
-
-app.get("/api/positions", async (req, res) => {
-  try {
-    const data = await getPositions();
-    res.json(data);
-  } catch (err) {
-    console.error("Positions error", err.response?.data || err.message);
-    res.status(500).json({
-      error: err.response?.data?.message || err.message || "Positions failed"
-    });
+    res.status(500).json({ error: err.response?.data || err.message || "Order failed" });
   }
 });
 
@@ -94,18 +82,22 @@ app.get("/api/orders", async (req, res) => {
     const data = await getOrders();
     res.json(data);
   } catch (err) {
-    console.error("Orders error", err.response?.data || err.message);
-    res.status(500).json({
-      error: err.response?.data?.message || err.message || "Orders fetch failed"
-    });
+    res.status(500).json({ error: err.response?.data || err.message || "Orders fetch failed" });
   }
 });
 
-// Local dev server.
-if (process.env.NODE_ENV !== "production") {
+app.get("/api/positions", async (req, res) => {
+  try {
+    const data = await getPositions();
+    res.json(data);
+  } catch (err) {
+    res.status(500).json({ error: err.response?.data || err.message || "Positions fetch failed" });
+  }
+});
+
+if (process.env.NODE_ENV === "development") {
   const port = process.env.PORT || 3001;
   app.listen(port, () => console.log("API listening on", port));
 }
 
-// For Vercel serverless.
 module.exports = app;
