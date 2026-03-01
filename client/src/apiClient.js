@@ -1,3 +1,5 @@
+// client/src/apiClient.js
+
 import axios from "axios";
 
 const api = axios.create({ baseURL: "/api" });
@@ -25,5 +27,11 @@ export const ApiClient = {
 
   getOrders() {
     return api.get("/orders").then((r) => r.data);
+  },
+
+  searchSymbols(query) {
+    return api
+      .get("/symbols", { params: { q: query } })
+      .then((r) => r.data);
   }
 };
