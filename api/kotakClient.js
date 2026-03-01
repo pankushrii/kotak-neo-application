@@ -135,10 +135,13 @@ async function getPositions() {
 // says something slightly different.
 
 async function searchScrip({ exchange_segment = "nse_cm", symbol }) {
-  const baseUrl = baseUrlOrThrow();
+  console.log("🔍 searchScrip called with:", { exchange_segment, symbol });
 
-  // Replace path if your docs show a different one, e.g. /quick/scrip/v1/search
-  const url = `${baseUrl}/quick/scrip/search`;
+  const baseUrl = baseUrlOrThrow();
+  console.log("📍 baseUrl from session:", baseUrl);
+
+  const url = `${baseUrl}/scrip/1.0/masterscrip/file-paths`;
+  console.log("🌐 Full search URL:", url);
 
   const payload = {
     exchange_segment,
@@ -147,9 +150,27 @@ async function searchScrip({ exchange_segment = "nse_cm", symbol }) {
     option_type: "",
     strike_price: ""
   };
+  console.log("📤 Request payload:", payload);
 
-  const res = await axios.post(url, payload, { headers: sessionHeaders() });
-  return res.data;
+  const headers = sessionHeaders();
+  console.log("📤 Request headers:", {
+    Auth: headers.Auth ? "present" : "missing",
+    "neo-fin-key": headers["neo-fin-key"],
+    sid: headers.sid ? "present" : "missing"
+  });
+
+  try {
+    console.log("🚀 Sending POST to Kotak...");
+    const res = await axios.post(url, payload, { headers });
+    console.log("✅ Kotak response status:", res.status);
+    console.log("📥 Kotak response data keys:", Object.keys(res.data || {}));
+    return res.data;
+  } catch (err) {
+    console.error("❌ Kotak error status:", err.response?.status);
+    console.error("❌ Kotak error data:", JSON.stringify(err.response?.data || err.message));
+    console.error("❌ Full error:", err.message);
+    throw err;
+  }
 }
 
 module.exports = {
