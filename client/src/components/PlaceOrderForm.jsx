@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { ApiClient } from "../apiClient";
 
 export function PlaceOrderForm({ onOrderPlaced }) {
@@ -9,12 +9,65 @@ export function PlaceOrderForm({ onOrderPlaced }) {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
 
+  const [suggestions, setSuggestions] = useState([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [searchLoading, setSearchLoading] = useState(false);
+
+  const debounceRef = useRef(null);
+  const inputRef = useRef(null);
+
+  // Debounced symbol search
+  useEffect(() => {
+    const q = symbol.trim();
+    if (!q || q.length < 2) {
+      setSuggestions([]);
+      setShowSuggestions(false);
+      return;
+    }
+
+    if (debounceRef.current) {
+      clearTimeout(debounceRef.current);
+    }
+
+    debounceRef.current = setTimeout(async () => {
+      setSearchLoading(true);
+      try {
+        const data = await ApiClient.searchSymbols(q);
+        setSuggestions(data || []);
+        setShowSuggestions(true);
+      } catch (err) {
+        console.error("Symbol search failed", err);
+        setSuggestions([]);
+        setShowSuggestions(false);
+      } finally {
+        setSearchLoading(false);
+      }
+    }, 220);
+
+    return () => {
+      if (debounceRef.current) {
+        clearTimeout(debounceRef.current);
+      }
+    };
+  }, [symbol]);
+
+  const handleSelectSuggestion = (s) => {
+    setSymbol(s.trdSymbol || s.name || "");
+    setShowSuggestions(false);
+  };
+
+  const handleBlur = () => {
+    // small delay so click on suggestion still works
+    setTimeout(() => setShowSuggestions(false), 150);
+  };
+
   const submit = async () => {
     setLoading(true);
     setMessage("");
     try {
       if (!symbol || Number(qty) <= 0) {
         setMessage("Please enter a valid symbol and quantity.");
+        setLoading(false);
         return;
       }
 
@@ -38,17 +91,45 @@ export function PlaceOrderForm({ onOrderPlaced }) {
     <div className="card">
       <div className="card-head">
         <h2>Place Order</h2>
-        <div className="muted">Market order · Equity</div>
+        <div className="muted">Start typing to search symbols.</div>
       </div>
 
       <div className="form-grid">
-        <div className="form-row">
+        <div className="form-row symbol-field">
           <label>Symbol</label>
           <input
+            ref={inputRef}
             value={symbol}
             onChange={(e) => setSymbol(e.target.value)}
+            onFocus={() => symbol.length >= 2 && setShowSuggestions(true)}
+            onBlur={handleBlur}
             placeholder="RELIANCE-EQ"
           />
+          {searchLoading && <div className="spinner" />}
+
+          {showSuggestions && suggestions.length > 0 && (
+            <div className="suggest-box">
+              {suggestions.map((s, idx) => (
+                <button
+                  key={idx}
+                  type="button"
+                  className="suggest-item"
+                  onMouseDown={() => handleSelectSuggestion(s)}
+                >
+                  <div className="suggest-symbol">{s.trdSymbol}</div>
+                  <div className="suggest-sub">
+                    {s.name} · {s.exchSeg}
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+
+          {showSuggestions && !searchLoading && suggestions.length === 0 && (
+            <div className="suggest-box empty">
+              <div className="suggest-sub">No matches for “{symbol}”.</div>
+            </div>
+          )}
         </div>
 
         <div className="form-row">
