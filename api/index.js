@@ -150,10 +150,15 @@ app.get("/api/symbols", async (req, res) => {
 
     res.json(mapped);
   } catch (err) {
-    console.error("Symbol search error", err.response?.data || err.message);
+    console.error(
+      "Symbol search error =>",
+      err.response?.status,
+      err.response?.data || err.message
+    );
     res.status(500).json({ error: "Symbol search failed" });
   }
 });
+
 
 // Local dev server (not used on Vercel)
 if (process.env.NODE_ENV === "development") {
