@@ -1,25 +1,40 @@
 // api/index.js
+
 const express = require("express");
 const cors = require("cors");
 const { clear, getSession } = require("./sessionStore");
-const { loginWithTotp, placeOrder, getOrders, getPositions } = require("./kotakClient");
+const {
+  loginWithTotp,
+  placeOrder,
+  getOrders,
+  getPositions,
+  searchScrip
+} = require("./kotakClient");
 
 const app = express();
 app.use(cors({ origin: "*" }));
 app.use(express.json());
 
-app.get("/api/health", (req, res) => res.json({ ok: true }));
+app.get("/api/health", (req, res) => {
+  res.json({ ok: true });
+});
 
-// Ask only TOTP
+// -------- Auth (TOTP only) --------
+
 app.post("/api/auth/login", async (req, res) => {
   try {
     const { totp } = req.body || {};
-    if (!totp) return res.status(400).json({ error: "totp is required" });
+    if (!totp) {
+      return res.status(400).json({ error: "totp is required" });
+    }
 
     const data = await loginWithTotp(totp);
     res.json({ success: true, ...data });
   } catch (err) {
-    res.status(500).json({ error: err.response?.data || err.message || "Login failed" });
+    console.error("Login error", err.response?.data || err.message);
+    res.status(500).json({
+      error: err.response?.data || err.message || "Login failed"
+    });
   }
 });
 
@@ -36,7 +51,8 @@ app.post("/api/auth/logout", (req, res) => {
   res.json({ success: true });
 });
 
-// Place order (same payload style as Neo docs: exchange_segment/product/order_type/etc).[page:1]
+// -------- Orders --------
+
 app.post("/api/orders", async (req, res) => {
   try {
     const {
@@ -50,7 +66,9 @@ app.post("/api/orders", async (req, res) => {
     } = req.body || {};
 
     if (!trading_symbol || !quantity || !side) {
-      return res.status(400).json({ error: "trading_symbol, quantity, side are required" });
+      return res
+        .status(400)
+        .json({ error: "trading_symbol, quantity, side are required" });
     }
 
     const payload = {
@@ -73,7 +91,10 @@ app.post("/api/orders", async (req, res) => {
     const data = await placeOrder(payload);
     res.json(data);
   } catch (err) {
-    res.status(500).json({ error: err.response?.data || err.message || "Order failed" });
+    console.error("Order error", err.response?.data || err.message);
+    res.status(500).json({
+      error: err.response?.data || err.message || "Order failed"
+    });
   }
 });
 
@@ -82,22 +103,65 @@ app.get("/api/orders", async (req, res) => {
     const data = await getOrders();
     res.json(data);
   } catch (err) {
-    res.status(500).json({ error: err.response?.data || err.message || "Orders fetch failed" });
+    console.error("Orders error", err.response?.data || err.message);
+    res.status(500).json({
+      error: err.response?.data || err.message || "Orders fetch failed"
+    });
   }
 });
+
+// -------- Positions --------
 
 app.get("/api/positions", async (req, res) => {
   try {
     const data = await getPositions();
     res.json(data);
   } catch (err) {
-    res.status(500).json({ error: err.response?.data || err.message || "Positions fetch failed" });
+    console.error("Positions error", err.response?.data || err.message);
+    res.status(500).json({
+      error: err.response?.data || err.message || "Positions fetch failed"
+    });
   }
 });
 
+// -------- Symbol search (autosuggest) --------
+//
+// Frontend calls: GET /api/symbols?q=...
+
+app.get("/api/symbols", async (req, res) => {
+  try {
+    const q = (req.query.q || "").toString().trim();
+    if (!q || q.length < 2) {
+      return res.json([]);
+    }
+
+    const data = await searchScrip({
+      exchange_segment: "nse_cm",
+      symbol: q.toUpperCase()
+    });
+
+    const rows = Array.isArray(data) ? data : data?.data || [];
+
+    const mapped = rows.slice(0, 15).map((s) => ({
+      trdSymbol: s.pTrdSymbol || s.trading_symbol || "",
+      name: s.pSymbolName || s.pDesc || "",
+      exchSeg: s.pExchSeg || s.exchange_segment || "nse_cm"
+    }));
+
+    res.json(mapped);
+  } catch (err) {
+    console.error("Symbol search error", err.response?.data || err.message);
+    res.status(500).json({ error: "Symbol search failed" });
+  }
+});
+
+// Local dev server (not used on Vercel)
 if (process.env.NODE_ENV === "development") {
   const port = process.env.PORT || 3001;
-  app.listen(port, () => console.log("API listening on", port));
+  app.listen(port, () => {
+    console.log("API listening on", port);
+  });
 }
 
+// For Vercel serverless
 module.exports = app;
