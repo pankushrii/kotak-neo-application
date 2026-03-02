@@ -134,34 +134,51 @@ async function fetchMasterScripCsvAndCache(force, session, isOptionChain = false
 }
 
 // --- Endpoints ---
-
 app.get("/api/option-chain", async (req, res) => {
   try {
-    const { symbol } = req.query; // Expects "NIFTY" or "BANKNIFTY"
+    const { symbol, spotPrice } = req.query; // spotPrice passed from frontend
     const session = getSessionFromReq(req);
-    
-    // Ensure we are hitting the F&O master file
     const cache = await fetchMasterScripCsvAndCache(false, session, true);
 
-    // Get current month code (e.g., "MAR")
+    if (!symbol || !spotPrice) {
+      return res.status(400).json({ error: "Symbol and spotPrice are required" });
+    }
+
     const currentMonth = new Date().toLocaleString('en-us', { month: 'short' }).toUpperCase();
+    const spot = parseFloat(spotPrice);
+    const range = 2000;
 
     const filtered = cache.rows.filter(r => {
       const ts = r.trdSymbol.toUpperCase();
-      const isCorrectIndex = ts.startsWith("NIFTY") || ts.startsWith("BANKNIFTY");
       
-      // Filter for current month and specific index
-      // Matches symbols like NIFTY26MAR26...
-      const isCurrentMonth = r.expiry.includes(currentMonth);
-      const isCallOrPut = ts.endsWith("CE") || ts.endsWith("PE");
+      // 1. Must be the requested Index
+      if (!ts.startsWith(symbol.toUpperCase())) return false;
+      
+      // 2. Must be Current Month
+      if (!r.expiry.includes(currentMonth)) return false;
 
-      return isCorrectIndex && isCurrentMonth && isCallOrPut;
+      // 3. Extract Strike Price from symbol (e.g., NIFTY26MAR2619500CE -> 19500)
+      // Regex looks for digits between the date and the CE/PE suffix
+      const strikeMatch = ts.match(/[A-Z](\d+)(?:CE|PE)$/);
+      if (!strikeMatch) return false;
+      
+      const strike = parseFloat(strikeMatch[1]);
+
+      // 4. Check if Strike is within ± 2000 points
+      return strike >= (spot - range) && strike <= (spot + range);
     });
 
-    console.log(`📊 [Option Chain]: Found ${filtered.length} ${currentMonth} contracts for NIFTY/BANKNIFTY`);
-    res.json(filtered.slice(0, 200));
-  } catch (err) { 
-    res.status(500).json({ error: err.message }); 
+    // Sort by Strike Price for a better UI experience
+    filtered.sort((a, b) => {
+      const strikeA = parseInt(a.trdSymbol.match(/\d+(?=CE|PE)/));
+      const strikeB = parseInt(b.trdSymbol.match(/\d+(?=CE|PE)/));
+      return strikeA - strikeB;
+    });
+
+    console.log(`📊 [Option Chain]: Found ${filtered.length} strikes for ${symbol} within ±2000 range.`);
+    res.json(filtered);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 });
 
