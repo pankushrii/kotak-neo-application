@@ -14,11 +14,14 @@ export function PlaceOrderForm({ onOrderPlaced }) {
   const [optionIndex, setOptionIndex] = useState("NIFTY");
   const [chainData, setChainData] = useState([]);
   const [chainLoading, setChainLoading] = useState(false);
-  const [strikeFilter, setStrikeFilter] = useState(""); // Minimal search state
+  const [strikeFilter, setStrikeFilter] = useState("");
 
   const [suggestions, setSuggestions] = useState([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [searchLoading, setSearchLoading] = useState(false);
+
+  // --- NEW STATE FOR SPOT PRICE ---
+  const [spotPrice, setSpotPrice] = useState(23000); 
 
   const debounceRef = useRef(null);
 
@@ -52,7 +55,8 @@ export function PlaceOrderForm({ onOrderPlaced }) {
       setChainLoading(true);
       setMessage("Loading Scrip Master...");
       try {
-        const data = await ApiClient.getOptionChain(optionIndex);
+        // --- UPDATED CALL TO PASS SPOT PRICE ---
+        const data = await ApiClient.getOptionChain(optionIndex, spotPrice);
         setChainData(data || []);
         setMessage("");
       } catch (err) {
@@ -62,9 +66,8 @@ export function PlaceOrderForm({ onOrderPlaced }) {
       }
     };
     fetchChain();
-  }, [optionIndex, viewMode]);
+  }, [optionIndex, viewMode, spotPrice]); // Added spotPrice dependency
 
-  // Filter chainData locally for the dropdown search
   const filteredChain = chainData.filter(opt => 
     opt.name.toLowerCase().includes(strikeFilter.toLowerCase()) ||
     opt.trdSymbol.toLowerCase().includes(strikeFilter.toLowerCase())
@@ -118,13 +121,18 @@ export function PlaceOrderForm({ onOrderPlaced }) {
           <div className="form-row">
             <label>Index & Strike Search</label>
             <div className="chain-selector" style={{ display: 'flex', gap: '5px', flexDirection: 'column' }}>
-              <select value={optionIndex} onChange={(e) => { setOptionIndex(e.target.value); setSymbol(""); }}>
+              <select value={optionIndex} onChange={(e) => { 
+                setOptionIndex(e.target.value); 
+                setSymbol(""); 
+                // Suggestion: Update spotPrice based on index selection here if needed
+                if(e.target.value === "BANKNIFTY") setSpotPrice(48000);
+                else setSpotPrice(23000);
+              }}>
                 <option value="NIFTY">NIFTY</option>
                 <option value="BANKNIFTY">BANKNIFTY</option>
-                <option value="SENSEX">SENSEX</option>
+                {/* SENSEX removed as requested (Nifty and BankNifty only) */}
               </select>
               
-              {/* Added minimal search input */}
               <input 
                 type="text" 
                 placeholder="Filter strikes (e.g. 21500)" 
@@ -137,7 +145,7 @@ export function PlaceOrderForm({ onOrderPlaced }) {
                 <option value="">-- {filteredChain.length} Strikes Found --</option>
                 {filteredChain.map((opt, idx) => (
                   <option key={idx} value={opt.trdSymbol}>
-                    {opt.expiry} | {opt.name.split(' ').slice(-2).join(' ')} {/* Shows Expiry | Price Type */}
+                    {opt.expiry} | {opt.name.split(' ').slice(-2).join(' ')}
                   </option>
                 ))}
               </select>
