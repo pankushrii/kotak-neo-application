@@ -234,21 +234,26 @@ async function fetchMasterScripCsvAndCache(force) {
   try {
     console.log("⬇️ downloading scrip master file...");
 
-    for (let attempt = 1; attempt <= 3; attempt++) {
-  try {
-    const dl = await axios.get(chosenUrl, { headers, responseType: "arraybuffer" });
-    bin = Buffer.from(dl.data);
-    console.log(`✅ download success on attempt ${attempt}`);
-    break;
-  } catch (err) {
-    console.log(`⚠️ attempt ${attempt} failed: ${err.response?.status}`);
-    if (attempt === 3) throw err;
-    await new Promise(r => setTimeout(r, 2000 * attempt));  // 2s, 4s, 6s
-  }
+   console.log("⬇️ downloading scrip master (may take 30-60s):", chosenUrl);
+
+let bin;
+try {
+  const dl = await axios.get(chosenUrl, { 
+    headers: { ...headers, Referer: baseUrl },
+    responseType: "arraybuffer",
+    timeout: 120000,  // 2min for large CSV
+    maxRedirects: 5
+  });
+  console.log("✅ download status:", dl.status, "bytes:", dl.data.length);
+  bin = Buffer.from(dl.data);
+} catch (err) {
+  console.error("❌ download failed:", err.code || err.response?.status, err.message);
+  throw err;
+}
 }
  //   const dl = await axios.get(chosenUrl, { headers, responseType: "arraybuffer" });
   //  console.log("✅ download status:", dl.status);
-    bin = Buffer.from(dl.data);
+//    bin = Buffer.from(dl.data);
     console.log("📦 downloaded bytes:", bin.length);
   } catch (err) {
     console.error("❌ download failed:", err.response?.status, err.response?.data || err.message);
