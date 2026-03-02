@@ -41,7 +41,7 @@ export const ApiClient = {
    * Fetches Option Chain for a specific index
    * @param {string} symbol - "NIFTY", "BANKNIFTY", or "SENSEX"
    */
-  getOptionChain(symbol) {
+  getOptionChain(symbol,spotPrice) {
     console.log(`📈 [Frontend]: Fetching Option Chain for ${symbol}...`);
     return api
       .get("/option-chain", { params: { symbol: symbol,
