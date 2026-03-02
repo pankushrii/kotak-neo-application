@@ -44,7 +44,8 @@ export const ApiClient = {
   getOptionChain(symbol) {
     console.log(`📈 [Frontend]: Fetching Option Chain for ${symbol}...`);
     return api
-      .get("/option-chain", { params: { symbol } })
+      .get("/option-chain", { params: { symbol,
+                                      spotPrice: spotPrice} })
       .then((r) => r.data);
   }
 };
