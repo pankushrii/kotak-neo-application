@@ -233,8 +233,21 @@ async function fetchMasterScripCsvAndCache(force) {
   let bin;
   try {
     console.log("⬇️ downloading scrip master file...");
+
+    for (let attempt = 1; attempt <= 3; attempt++) {
+  try {
     const dl = await axios.get(chosenUrl, { headers, responseType: "arraybuffer" });
-    console.log("✅ download status:", dl.status);
+    bin = Buffer.from(dl.data);
+    console.log(`✅ download success on attempt ${attempt}`);
+    break;
+  } catch (err) {
+    console.log(`⚠️ attempt ${attempt} failed: ${err.response?.status}`);
+    if (attempt === 3) throw err;
+    await new Promise(r => setTimeout(r, 2000 * attempt));  // 2s, 4s, 6s
+  }
+}
+ //   const dl = await axios.get(chosenUrl, { headers, responseType: "arraybuffer" });
+  //  console.log("✅ download status:", dl.status);
     bin = Buffer.from(dl.data);
     console.log("📦 downloaded bytes:", bin.length);
   } catch (err) {
