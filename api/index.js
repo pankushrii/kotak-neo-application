@@ -1,13 +1,10 @@
-// api/index.js
-
 const express = require("express");
 const cors = require("cors");
 const axios = require("axios");
 const zlib = require("zlib");
+const cookieParser = require("cookie-parser");
 
-const { clear, getSession } = require("./sessionStore");
 const { apiConfig } = require("./kotakConfig");
-
 const {
   loginWithTotp,
   placeOrder,
@@ -16,121 +13,89 @@ const {
 } = require("./kotakClient");
 
 const app = express();
-app.use(cors({ origin: "*" }));
+
+// --- Middleware Configuration ---
+app.use(cookieParser());
+app.use(cors({ 
+  origin: true, // Set this to your frontend URL in production
+  credentials: true 
+}));
 app.use(express.json());
 
 // --------------------
-// Scrip master cache
+// Scrip master cache (Stays in memory for the duration of the Lambda execution)
 // --------------------
 let SCRIP_CACHE = {
   updatedAt: 0,
   rows: [],
-  meta: {
-    sourceUrl: null,
-    count: 0
-  }
+  meta: { sourceUrl: null, count: 0 }
 };
 
-const CACHE_DURATION_MS = 24 * 60 * 60 * 1000; // 24 hours
+const CACHE_DURATION_MS = 24 * 60 * 60 * 1000;
 
-function hasActiveSession() {
-  const s = getSession();
-  return !!(s.sessionToken && s.baseUrl);
+// --------------------
+// Session Helpers (Reading from Cookies)
+// --------------------
+function getSessionFromRequest(req) {
+  return {
+    baseUrl: req.cookies.baseUrl,
+    sessionToken: req.cookies.sessionToken,
+    sessionSid: req.cookies.sessionSid
+  };
 }
 
-function baseUrlOrThrow() {
-  const s = getSession();
-  if (!s.baseUrl) throw new Error("No baseUrl in session. Login first.");
-  return s.baseUrl;
-}
+function sessionHeadersOrThrow(session) {
+  if (!session.sessionToken) throw new Error("No sessionToken. Login first.");
 
-function sessionHeadersOrThrow() {
-  const s = getSession();
-  if (!s.sessionToken) throw new Error("No sessionToken. Login first.");
-
-  // v2: session token goes in Auth header
-  const headers = {
+  return {
     Accept: "application/json",
     "Content-Type": "application/json",
     "neo-fin-key": apiConfig.neoFinKey,
-    Auth: s.sessionToken,
+    Auth: session.sessionToken,
     Authorization: apiConfig.accessToken,
+    ...(session.sessionSid && { sid: session.sessionSid })
   };
-
-  if (s.sessionSid) headers.sid = s.sessionSid;
-
-  return headers;
 }
 
-// Recursively extract all string values from any JSON shape
+// --------------------
+// Utility Functions
+// --------------------
 function extractStringsDeep(x, out) {
   if (!x) return;
-  if (typeof x === "string") {
-    out.push(x);
-    return;
-  }
-  if (Array.isArray(x)) {
-    for (const v of x) extractStringsDeep(v, out);
-    return;
-  }
-  if (typeof x === "object") {
-    for (const k of Object.keys(x)) extractStringsDeep(x[k], out);
-  }
+  if (typeof x === "string") { out.push(x); return; }
+  if (Array.isArray(x)) { for (const v of x) extractStringsDeep(v, out); return; }
+  if (typeof x === "object") { for (const k of Object.keys(x)) extractStringsDeep(x[k], out); }
 }
 
 function chooseBestScripFileUrl(candidates, baseUrl) {
-  // Normalize to absolute URLs
   const urls = candidates
     .filter(Boolean)
     .map((u) => {
       const s = String(u).trim();
       if (!s) return null;
-      if (s.startsWith("http://") || s.startsWith("https://")) return s;
-      if (s.startsWith("/")) return `${baseUrl}${s}`;
-      // sometimes they may return relative like "path/to/file.csv"
-      return `${baseUrl}/${s}`;
+      if (s.startsWith("http")) return s;
+      return s.startsWith("/") ? `${baseUrl}${s}` : `${baseUrl}/${s}`;
     })
     .filter(Boolean);
 
-  // Prefer CSV/CSV.GZ
   const csvLike = urls.filter((u) => /\.csv(\.gz)?$/i.test(u));
   const pool = csvLike.length ? csvLike : urls;
-
-  // Prefer NSE cash market patterns if present
-  const prefer = (u) =>
-    /nse/i.test(u) && /(cm|cash|eq)/i.test(u) && /\.csv(\.gz)?$/i.test(u);
-
-  const preferred = pool.find(prefer);
+  const preferred = pool.find((u) => /nse/i.test(u) && /(cm|cash|eq)/i.test(u) && /\.csv(\.gz)?$/i.test(u));
   return preferred || pool[0] || null;
 }
 
-// Simple CSV line parser supporting quoted fields
 function parseCsvLine(line) {
   const result = [];
   let cur = "";
   let inQuotes = false;
-
   for (let i = 0; i < line.length; i++) {
     const ch = line[i];
-
     if (ch === '"') {
-      // handle escaped quote ""
-      const next = line[i + 1];
-      if (inQuotes && next === '"') {
-        cur += '"';
-        i++;
-      } else {
-        inQuotes = !inQuotes;
-      }
+      if (inQuotes && line[i + 1] === '"') { cur += '"'; i++; } 
+      else { inQuotes = !inQuotes; }
       continue;
     }
-
-    if (ch === "," && !inQuotes) {
-      result.push(cur);
-      cur = "";
-      continue;
-    }
-
+    if (ch === "," && !inQuotes) { result.push(cur); cur = ""; continue; }
     cur += ch;
   }
   result.push(cur);
@@ -140,156 +105,48 @@ function parseCsvLine(line) {
 function parseScripMasterCsv(csvText) {
   const lines = String(csvText).split(/\r?\n/).filter(Boolean);
   if (!lines.length) return [];
+  const header = parseCsvLine(lines[0]).map(h => h.replace(/^"|"$/g, ""));
+  const idx = (n) => header.findIndex(h => h.toLowerCase() === n.toLowerCase());
 
-  const header = parseCsvLine(lines[0]).map((h) => h.replace(/^"|"$/g, ""));
-  const idx = (name) => header.findIndex((h) => h.toLowerCase() === name.toLowerCase());
+  const iTrd = [idx("pTrdSymbol"), idx("trdSym"), idx("trading_symbol")].find(i => i >= 0);
+  const iName = [idx("pSymbolName"), idx("name"), idx("pDesc")].find(i => i >= 0);
+  const iSeg = [idx("pExchSeg"), idx("exchange_segment"), idx("exchSeg")].find(i => i >= 0);
 
-  // Try to locate common columns; fallback to first columns if not found
-  const iTrd =
-    idx("pTrdSymbol") >= 0 ? idx("pTrdSymbol") :
-    idx("trdSym") >= 0 ? idx("trdSym") :
-    idx("trading_symbol") >= 0 ? idx("trading_symbol") : -1;
-
-  const iName =
-    idx("pSymbolName") >= 0 ? idx("pSymbolName") :
-    idx("name") >= 0 ? idx("name") :
-    idx("pDesc") >= 0 ? idx("pDesc") : -1;
-
-  const iSeg =
-    idx("pExchSeg") >= 0 ? idx("pExchSeg") :
-    idx("exchange_segment") >= 0 ? idx("exchange_segment") :
-    idx("exchSeg") >= 0 ? idx("exchSeg") : -1;
-
-  const rows = [];
-  for (let i = 1; i < lines.length; i++) {
-    const cols = parseCsvLine(lines[i]).map((v) => v.replace(/^"|"$/g, ""));
-    if (!cols.length) continue;
-
-    const trdSymbol = iTrd >= 0 ? cols[iTrd] : cols[1] || cols[0] || "";
-    const name = iName >= 0 ? cols[iName] : cols[2] || "";
-    const exchSeg = iSeg >= 0 ? cols[iSeg] : "nse_cm";
-
-    if (!trdSymbol) continue;
-
-    rows.push({
-      trdSymbol,
-      name,
-      exchSeg
-    });
-  }
-
-  return rows;
+  return lines.slice(1).map(line => {
+    const cols = parseCsvLine(line).map(v => v.replace(/^"|"$/g, ""));
+    return {
+      trdSymbol: iTrd >= 0 ? cols[iTrd] : cols[1] || "",
+      name: iName >= 0 ? cols[iName] : cols[2] || "",
+      exchSeg: iSeg >= 0 ? cols[iSeg] : "nse_cm"
+    };
+  }).filter(r => r.trdSymbol);
 }
 
-async function fetchMasterScripCsvAndCache(force) {
+async function fetchMasterScripCsvAndCache(force, session) {
   const now = Date.now();
-  const age = now - SCRIP_CACHE.updatedAt;
-
-  console.log("🧠 fetchMasterScripCsvAndCache called:", { force, cached: !!SCRIP_CACHE.rows?.length, ageMs: age });
-
-  if (!force && SCRIP_CACHE.rows?.length && age < CACHE_DURATION_MS) {
-    console.log("✅ Using cached scrip master:", { count: SCRIP_CACHE.rows.length, updatedAt: SCRIP_CACHE.updatedAt });
+  if (!force && SCRIP_CACHE.rows.length && (now - SCRIP_CACHE.updatedAt < CACHE_DURATION_MS)) {
     return SCRIP_CACHE;
   }
 
+  const baseUrl = session.baseUrl;
+  if (!baseUrl) throw new Error("No baseUrl in session. Login first.");
+  const headers = sessionHeadersOrThrow(session);
 
-  const baseUrl = baseUrlOrThrow();
-  const headers = sessionHeadersOrThrow();
-
-  console.log("🧾 ALL HEADERS (full values):", JSON.stringify(headers, null, 2));
-
-  // IMPORTANT: your logs show this endpoint exists on baseUrl host, but POST returns 404.
   const filePathsUrl = `${baseUrl}/script-details/1.0/masterscrip/file-paths`;
+  const filePathsResp = await axios.get(filePathsUrl, { headers });
 
-  console.log("📍 baseUrl:", baseUrl);
-  console.log("🌐 filePathsUrl:", filePathsUrl);
-  console.log("🧾 headers:", { Auth: headers.Auth ? "present" : "missing", sid: headers.sid ? "present" : "missing", "neo-fin-key": headers["neo-fin-key"] });
-
-  let filePathsResp;
-  try {
-    console.log("🚀 GET file-paths...");
-    filePathsResp = await axios.get(filePathsUrl, { headers });
-    console.log("✅ file-paths status:", filePathsResp.status);
-  } catch (err) {
-    console.error("❌ file-paths failed:", err.response?.status, err.response?.data || err.message);
-    throw err;
-  }
-
-  // Extract candidate URLs/paths from response JSON
   const candidates = [];
   extractStringsDeep(filePathsResp.data, candidates);
-
-  console.log("📦 file-paths extracted string candidates:", candidates.slice(0, 30));
-  console.log("📦 candidate count:", candidates.length);
-
   const chosenUrl = chooseBestScripFileUrl(candidates, baseUrl);
-  console.log("🎯 chosen master scrip file URL:", chosenUrl);
 
-  if (!chosenUrl) {
-    throw new Error("Could not find any CSV/CSV.GZ URL in file-paths response.");
-  }
+  if (!chosenUrl) throw new Error("Could not find CSV URL.");
 
-  // Download the CSV (or CSV.GZ)
-let bin;
-try {
-  const dl = await axios.get(chosenUrl, { 
-    responseType: "arraybuffer",
-    timeout: 120000,  // 2min for large CSV
-    maxRedirects: 5
-  });
-  console.log("✅ download status:", dl.status, "bytes:", dl.data.length);
-  bin = Buffer.from(dl.data);
-} catch (err) {
-  console.error("❌ download failed:", err.code || err.response?.status, err.message);
-  console.error("❌ headers:", err.response?.headers);
-  console.error("❌ body:", err.response?.data?.toString?.());
-  
-  throw err;
-}
+  const dl = await axios.get(chosenUrl, { responseType: "arraybuffer", timeout: 120000 });
+  let bin = Buffer.from(dl.data);
+  let csvText = /\.gz$/i.test(chosenUrl) ? zlib.gunzipSync(bin).toString("utf-8") : bin.toString("utf-8");
 
- //   const dl = await axios.get(chosenUrl, { headers, responseType: "arraybuffer" });
-  //  console.log("✅ download status:", dl.status);
-//    bin = Buffer.from(dl.data);
-
-
-  // If gz, gunzip
-  let csvText;
-  const isGz = /\.gz$/i.test(chosenUrl);
-  try {
-    if (isGz) {
-      console.log("🧩 gunzipping .gz content...");
-      csvText = zlib.gunzipSync(bin).toString("utf-8");
-    } else {
-      csvText = bin.toString("utf-8");
-    }
-    console.log("✅ csvText length:", csvText.length);
-  } catch (err) {
-    console.error("❌ failed to decode CSV:", err.message);
-    throw err;
-  }
-
-  // Parse
-  let rows;
-  try {
-    console.log("🧮 parsing CSV...");
-    rows = parseScripMasterCsv(csvText);
-    console.log("✅ parsed rows:", rows.length);
-  } catch (err) {
-    console.error("❌ CSV parse failed:", err.message);
-    throw err;
-  }
-
-  // Cache
-  SCRIP_CACHE = {
-    updatedAt: now,
-    rows,
-    meta: {
-      sourceUrl: chosenUrl,
-      count: rows.length
-    }
-  };
-
-  console.log("✅ scrip master cache updated:", SCRIP_CACHE.meta);
+  const rows = parseScripMasterCsv(csvText);
+  SCRIP_CACHE = { updatedAt: now, rows, meta: { sourceUrl: chosenUrl, count: rows.length } };
   return SCRIP_CACHE;
 }
 
@@ -300,133 +157,62 @@ app.get("/api/health", (req, res) => res.json({ ok: true }));
 
 app.post("/api/auth/login", async (req, res) => {
   try {
-    const { totp } = req.body || {};
-    if (!totp) return res.status(400).json({ error: "totp is required" });
+    const { totp } = req.body;
+    if (!totp) return res.status(400).json({ error: "totp required" });
 
     const data = await loginWithTotp(totp);
 
-    // (optional) warm up cache in background after login
-    fetchMasterScripCsvAndCache(false).catch((e) =>
-      console.error("⚠️ warmup scrip master failed:", e.response?.data || e.message)
-    );
+    const cookieOptions = {
+      httpOnly: true,
+      secure: true, // Set to false if testing on localhost without SSL
+      sameSite: "none",
+      maxAge: 24 * 60 * 60 * 1000
+    };
+
+    res.cookie("sessionToken", data.sessionToken, cookieOptions);
+    res.cookie("baseUrl", data.baseUrl, cookieOptions);
+    if (data.sessionSid) res.cookie("sessionSid", data.sessionSid, cookieOptions);
 
     res.json({ success: true, ...data });
   } catch (err) {
-    console.error("Login error:", err.response?.data || err.message);
-    res.status(500).json({ error: err.response?.data || err.message || "Login failed" });
+    res.status(500).json({ error: err.message });
   }
-});
-
-app.get("/api/auth/session", (req, res) => {
-  const s = getSession();
-  res.json({
-    hasSession: !!(s.sessionToken && s.baseUrl),
-    lastLoginAt: s.lastLoginAt
-  });
 });
 
 app.post("/api/auth/logout", (req, res) => {
-  clear();
-  // clear cache too (optional)
-  SCRIP_CACHE = { updatedAt: 0, rows: [], meta: { sourceUrl: null, count: 0 } };
+  res.clearCookie("sessionToken");
+  res.clearCookie("baseUrl");
+  res.clearCookie("sessionSid");
   res.json({ success: true });
 });
 
-app.post("/api/orders", async (req, res) => {
-  try {
-    const {
-      trading_symbol,
-      quantity,
-      side,
-      exchange_segment = "nse_cm",
-      product = "CNC",
-      order_type = "MKT",
-      validity = "DAY"
-    } = req.body || {};
-
-    if (!trading_symbol || !quantity || !side) {
-      return res.status(400).json({ error: "trading_symbol, quantity, side are required" });
-    }
-
-    const payload = {
-      exchange_segment,
-      product,
-      price: "0",
-      order_type,
-      quantity: String(quantity),
-      validity,
-      trading_symbol,
-      transaction_type: side === "BUY" ? "B" : "S",
-      amo: "NO",
-      disclosed_quantity: "0",
-      market_protection: "0",
-      pf: "N",
-      trigger_price: "0",
-      tag: null
-    };
-
-    const data = await placeOrder(payload);
-    res.json(data);
-  } catch (err) {
-    console.error("Order error:", err.response?.data || err.message);
-    res.status(500).json({ error: err.response?.data || err.message || "Order failed" });
-  }
-});
-
-app.get("/api/orders", async (req, res) => {
-  try {
-    const data = await getOrders();
-    res.json(data);
-  } catch (err) {
-    console.error("Orders fetch error:", err.response?.data || err.message);
-    res.status(500).json({ error: err.response?.data || err.message || "Orders fetch failed" });
-  }
-});
-
-app.get("/api/positions", async (req, res) => {
-  try {
-    const data = await getPositions();
-    res.json(data);
-  } catch (err) {
-    console.error("Positions fetch error:", err.response?.data || err.message);
-    res.status(500).json({ error: err.response?.data || err.message || "Positions fetch failed" });
-  }
-});
-
-// Force refresh (optional helper)
-app.post("/api/scrip/refresh", async (req, res) => {
-  try {
-    const cache = await fetchMasterScripCsvAndCache(true);
-    res.json({ success: true, meta: cache.meta, updatedAt: cache.updatedAt });
-  } catch (err) {
-    console.error("Scrip refresh error:", err.response?.data || err.message);
-    res.status(500).json({ error: err.response?.data || err.message || "Scrip refresh failed" });
-  }
-});
-
-// Autosuggest endpoint
 app.get("/api/symbols", async (req, res) => {
   try {
-    const q = (req.query.q || "").toString().trim();
-    if (!q || q.length < 2) return res.json([]);
+    const session = getSessionFromRequest(req);
+    const q = (req.query.q || "").toString().trim().toUpperCase();
+    if (q.length < 2) return res.json([]);
 
-    const query = q.toUpperCase();
-
-    const cache = await fetchMasterScripCsvAndCache(false);
-    const rows = cache.rows || [];
-
-    const matches = rows
-      .filter((r) => {
-        const ts = (r.trdSymbol || "").toUpperCase();
-        const nm = (r.name || "").toUpperCase();
-        return ts.includes(query) || nm.includes(query);
-      })
+    const cache = await fetchMasterScripCsvAndCache(false, session);
+    const matches = cache.rows
+      .filter(r => r.trdSymbol.toUpperCase().includes(q) || r.name.toUpperCase().includes(q))
       .slice(0, 15);
 
     res.json(matches);
   } catch (err) {
-    console.error("Symbol search failed:", err.response?.status, err.response?.data || err.message);
-    res.status(500).json({ error: "Symbol search failed" });
+    console.error("Symbol search failed:", err.message);
+    res.status(401).json({ error: err.message });
+  }
+});
+
+// Update standard routes to use cookies
+app.get("/api/orders", async (req, res) => {
+  try {
+    // Note: getOrders() in kotakClient needs to be updated to accept session 
+    // or you can manually call axios here using sessionHeadersOrThrow(getSessionFromRequest(req))
+    const data = await getOrders(); 
+    res.json(data);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 });
 
@@ -436,5 +222,4 @@ if (process.env.NODE_ENV === "development") {
   app.listen(port, () => console.log("API listening on", port));
 }
 
-// For Vercel
 module.exports = app;
