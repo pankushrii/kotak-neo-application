@@ -248,11 +248,7 @@ try {
  //   const dl = await axios.get(chosenUrl, { headers, responseType: "arraybuffer" });
   //  console.log("✅ download status:", dl.status);
 //    bin = Buffer.from(dl.data);
-    console.log("📦 downloaded bytes:", bin.length);
-  } catch (err) {
-    console.error("❌ download failed:", err.response?.status, err.response?.data || err.message);
-    throw err;
-  }
+
 
   // If gz, gunzip
   let csvText;
