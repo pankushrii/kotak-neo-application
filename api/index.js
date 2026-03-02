@@ -138,6 +138,7 @@ app.get("/api/option-chain", async (req, res) => {
   try {
     const { symbol, spotPrice } = req.query; // spotPrice passed from frontend
     const session = getSessionFromReq(req);
+    console.log(`📈 [Frontend]: Fetching Option Chain for ${symbol} around ${spotPrice}...`);
     const cache = await fetchMasterScripCsvAndCache(false, session, true);
 
     if (!symbol || !spotPrice) {
