@@ -5,19 +5,25 @@ export function PlaceOrderForm({ onOrderPlaced }) {
   const [symbol, setSymbol] = useState("RELIANCE-EQ");
   const [qty, setQty] = useState(1);
   const [side, setSide] = useState("BUY");
-  const [product, setProduct] = useState("CNC");
+  const [product, setProduct] = useState("CNC"); // Change to MIS or NRML for F&O
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
+
+  // Option Chain States
+  const [viewMode, setViewMode] = useState("SEARCH"); // SEARCH or OPTION_CHAIN
+  const [optionIndex, setOptionIndex] = useState("NIFTY");
+  const [chainData, setChainData] = useState([]);
+  const [chainLoading, setChainLoading] = useState(false);
 
   const [suggestions, setSuggestions] = useState([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [searchLoading, setSearchLoading] = useState(false);
 
   const debounceRef = useRef(null);
-  const inputRef = useRef(null);
 
-  // Debounced symbol search
+  // Effect for standard symbol search
   useEffect(() => {
+    if (viewMode !== "SEARCH") return;
     const q = symbol.trim();
     if (!q || q.length < 2) {
       setSuggestions([]);
@@ -25,9 +31,7 @@ export function PlaceOrderForm({ onOrderPlaced }) {
       return;
     }
 
-    if (debounceRef.current) {
-      clearTimeout(debounceRef.current);
-    }
+    if (debounceRef.current) clearTimeout(debounceRef.current);
 
     debounceRef.current = setTimeout(async () => {
       setSearchLoading(true);
@@ -36,52 +40,49 @@ export function PlaceOrderForm({ onOrderPlaced }) {
         setSuggestions(data || []);
         setShowSuggestions(true);
       } catch (err) {
-        console.error("Symbol search failed", err);
         setSuggestions([]);
-        setShowSuggestions(false);
       } finally {
         setSearchLoading(false);
       }
     }, 220);
 
-    return () => {
-      if (debounceRef.current) {
-        clearTimeout(debounceRef.current);
+    return () => debounceRef.current && clearTimeout(debounceRef.current);
+  }, [symbol, viewMode]);
+
+  // Effect to fetch Option Chain
+  useEffect(() => {
+    if (viewMode !== "OPTION_CHAIN") return;
+
+    const fetchChain = async () => {
+      setChainLoading(true);
+      setMessage("Downloading/Filtering Scrip Master..."); // Important for the first load
+      try {
+        const data = await ApiClient.getOptionChain(optionIndex);
+        setChainData(data || []);
+        setMessage("");
+      } catch (err) {
+        setMessage("Failed to load option chain.");
+      } finally {
+        setChainLoading(false);
       }
     };
-  }, [symbol]);
-
-  const handleSelectSuggestion = (s) => {
-    setSymbol(s.trdSymbol || s.name || "");
-    setShowSuggestions(false);
-  };
-
-  const handleBlur = () => {
-    // small delay so click on suggestion still works
-    setTimeout(() => setShowSuggestions(false), 150);
-  };
+    fetchChain();
+  }, [optionIndex, viewMode]);
 
   const submit = async () => {
     setLoading(true);
     setMessage("");
     try {
-      if (!symbol || Number(qty) <= 0) {
-        setMessage("Please enter a valid symbol and quantity.");
-        setLoading(false);
-        return;
-      }
-
       const res = await ApiClient.placeOrder({
         trading_symbol: symbol.trim(),
         quantity: Number(qty),
         side,
         product
       });
-
-      setMessage("Order placed (request accepted).");
+      setMessage("Order placed successfully.");
       if (onOrderPlaced) onOrderPlaced(res);
     } catch (e) {
-      setMessage(e?.response?.data?.error || e.message || "Order placement failed.");
+      setMessage(e?.response?.data?.error || e.message || "Order failed.");
     } finally {
       setLoading(false);
     }
@@ -91,55 +92,62 @@ export function PlaceOrderForm({ onOrderPlaced }) {
     <div className="card">
       <div className="card-head">
         <h2>Place Order</h2>
-        <div className="muted">Start typing to search symbols.</div>
+        <div className="mode-toggle">
+          <button 
+            className={viewMode === "SEARCH" ? "active" : ""} 
+            onClick={() => setViewMode("SEARCH")}
+          >Search Stocks</button>
+          <button 
+            className={viewMode === "OPTION_CHAIN" ? "active" : ""} 
+            onClick={() => {
+              setViewMode("OPTION_CHAIN");
+              setProduct("NRML"); // Default to NRML for Options
+            }}
+          >Option Chain</button>
+        </div>
       </div>
 
       <div className="form-grid">
-        <div className="form-row symbol-field">
-          <label>Symbol</label>
-          <input
-            ref={inputRef}
-            value={symbol}
-            onChange={(e) => setSymbol(e.target.value)}
-            onFocus={() => symbol.length >= 2 && setShowSuggestions(true)}
-            onBlur={handleBlur}
-            placeholder="RELIANCE-EQ"
-          />
-          {searchLoading && <div className="spinner" />}
-
-          {showSuggestions && suggestions.length > 0 && (
-            <div className="suggest-box">
-              {suggestions.map((s, idx) => (
-                <button
-                  key={idx}
-                  type="button"
-                  className="suggest-item"
-                  onMouseDown={() => handleSelectSuggestion(s)}
-                >
-                  <div className="suggest-symbol">{s.trdSymbol}</div>
-                  <div className="suggest-sub">
-                    {s.name} · {s.exchSeg}
+        {viewMode === "SEARCH" ? (
+          <div className="form-row symbol-field">
+            <label>Search Symbol</label>
+            <input
+              value={symbol}
+              onChange={(e) => setSymbol(e.target.value)}
+              placeholder="e.g. RELIANCE-EQ"
+            />
+            {showSuggestions && suggestions.length > 0 && (
+              <div className="suggest-box">
+                {suggestions.map((s, idx) => (
+                  <div key={idx} className="suggest-item" onClick={() => { setSymbol(s.trdSymbol); setShowSuggestions(false); }}>
+                    {s.trdSymbol} <small>{s.name}</small>
                   </div>
-                </button>
-              ))}
+                ))}
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="form-row">
+            <label>Index & Strike</label>
+            <div className="chain-selector">
+              <select value={optionIndex} onChange={(e) => setOptionIndex(e.target.value)}>
+                <option value="NIFTY">NIFTY</option>
+                <option value="BANKNIFTY">BANKNIFTY</option>
+                <option value="SENSEX">SENSEX</option>
+              </select>
+              <select value={symbol} onChange={(e) => setSymbol(e.target.value)}>
+                <option value="">-- Select Strike --</option>
+                {chainData.map((opt, idx) => (
+                  <option key={idx} value={opt.trdSymbol}>{opt.name}</option>
+                ))}
+              </select>
             </div>
-          )}
-
-          {showSuggestions && !searchLoading && suggestions.length === 0 && (
-            <div className="suggest-box empty">
-              <div className="suggest-sub">No matches for “{symbol}”.</div>
-            </div>
-          )}
-        </div>
+          </div>
+        )}
 
         <div className="form-row">
           <label>Quantity</label>
-          <input
-            type="number"
-            min={1}
-            value={qty}
-            onChange={(e) => setQty(e.target.value)}
-          />
+          <input type="number" value={qty} onChange={(e) => setQty(e.target.value)} />
         </div>
 
         <div className="form-row">
@@ -154,23 +162,19 @@ export function PlaceOrderForm({ onOrderPlaced }) {
           <label>Product</label>
           <select value={product} onChange={(e) => setProduct(e.target.value)}>
             <option value="CNC">CNC</option>
-            <option value="MIS">MIS</option>
-            <option value="NRML">NRML</option>
+            <option value="MIS">MIS (Intraday)</option>
+            <option value="NRML">NRML (Overnight)</option>
           </select>
         </div>
       </div>
 
       <div className="btn-row">
-        <button onClick={submit} disabled={loading}>
-          {loading ? "Placing…" : "Place Order"}
+        <button onClick={submit} disabled={loading || !symbol}>
+          {loading ? "Processing..." : `${side} ${symbol || "Order"}`}
         </button>
       </div>
 
-      {message && (
-        <p className={message.toLowerCase().includes("fail") ? "error" : "message"}>
-          {message}
-        </p>
-      )}
+      {message && <p className="message">{message}</p>}
     </div>
   );
 }
