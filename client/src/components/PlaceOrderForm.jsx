@@ -21,7 +21,7 @@ export function PlaceOrderForm({ onOrderPlaced }) {
   const [searchLoading, setSearchLoading] = useState(false);
 
   // --- NEW STATE FOR SPOT PRICE ---
-  const [spotPrice, setSpotPrice] = useState(23000); 
+  const [spotPrice, setSpotPrice] = useState(25000); 
 
   const debounceRef = useRef(null);
 
