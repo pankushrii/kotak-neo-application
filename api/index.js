@@ -21,7 +21,14 @@ app.use(cors({
   credentials: true 
 }));
 app.use(express.json());
-
+// Helper to extract session from cookies instead of memory
+function getSessionFromReq(req) {
+  return {
+    baseUrl: req.cookies.baseUrl,
+    sessionToken: req.cookies.sessionToken,
+    sessionSid: req.cookies.sessionSid
+  };
+}
 // --------------------
 // Scrip master cache (Stays in memory for the duration of the Lambda execution)
 // --------------------
