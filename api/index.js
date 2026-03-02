@@ -230,12 +230,6 @@ async function fetchMasterScripCsvAndCache(force) {
   }
 
   // Download the CSV (or CSV.GZ)
-  let bin;
-  try {
-    console.log("⬇️ downloading scrip master file...");
-
-   console.log("⬇️ downloading scrip master (may take 30-60s):", chosenUrl);
-
 let bin;
 try {
   const dl = await axios.get(chosenUrl, { 
@@ -250,7 +244,7 @@ try {
   console.error("❌ download failed:", err.code || err.response?.status, err.message);
   throw err;
 }
-}
+
  //   const dl = await axios.get(chosenUrl, { headers, responseType: "arraybuffer" });
   //  console.log("✅ download status:", dl.status);
 //    bin = Buffer.from(dl.data);
