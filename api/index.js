@@ -196,7 +196,7 @@ async function fetchMasterScripCsvAndCache(force) {
   const headers = sessionHeadersOrThrow();
 
   // IMPORTANT: your logs show this endpoint exists on baseUrl host, but POST returns 404.
-  const filePathsUrl = `${baseUrl}/scrip/1.0/masterscrip/file-paths`;
+  const filePathsUrl = `${baseUrl}/script-details/1.0/masterscrip/file-paths`;
 
   console.log("📍 baseUrl:", baseUrl);
   console.log("🌐 filePathsUrl:", filePathsUrl);
