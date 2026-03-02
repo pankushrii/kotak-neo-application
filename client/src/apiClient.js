@@ -1,8 +1,10 @@
-// client/src/apiClient.js
-
 import axios from "axios";
 
-const api = axios.create({ baseURL: "/api" });
+// CRITICAL: withCredentials: true ensures cookies are sent/received in every request
+const api = axios.create({ 
+  baseURL: "/api",
+  withCredentials: true 
+});
 
 export const ApiClient = {
   login(totp) {
@@ -33,7 +35,8 @@ export const ApiClient = {
     return api
       .get("/symbols", { params: { q: query } })
       .then((r) => r.data);
-  }
+  }, // <--- Ensure this comma exists!
+
   /**
    * Fetches Option Chain for a specific index
    * @param {string} symbol - "NIFTY", "BANKNIFTY", or "SENSEX"
