@@ -111,13 +111,23 @@ async function fetchMasterScripCsvAndCache(force, session, isOptionChain = false
 
   const rows = lines.slice(1).map(line => {
     const cols = line.split(",").map(v => v.replace(/^"|"$/g, "").trim());
+    const trdSymbol = cols[iTrd] || "";
+
+    // --- MINIMAL CHANGE: Extract Expiry ---
+    let expiry = "";
+    if (isOptionChain && trdSymbol) {
+      // Matches pattern like 26MAR26 or 05MAR26
+      const match = trdSymbol.match(/\d{2}[A-Z]{3}\d{2}/);
+      expiry = match ? match[0] : "";
+    }
     return {
-      trdSymbol: cols[iTrd] || "",
+      trdSymbol,
       name: cols[iName] || "",
+      expiry, // Now included in the response
       exchSeg: isOptionChain ? "nse_fo" : "nse_cm"
     };
   }).filter(r => r.trdSymbol);
-
+  
   SCRIP_CACHE = { 
     updatedAt: now, 
     rows, 
