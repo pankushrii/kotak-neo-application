@@ -233,7 +233,6 @@ async function fetchMasterScripCsvAndCache(force) {
 let bin;
 try {
   const dl = await axios.get(chosenUrl, { 
-    headers: { ...headers, Referer: baseUrl },
     responseType: "arraybuffer",
     timeout: 120000,  // 2min for large CSV
     maxRedirects: 5
@@ -242,6 +241,9 @@ try {
   bin = Buffer.from(dl.data);
 } catch (err) {
   console.error("❌ download failed:", err.code || err.response?.status, err.message);
+  console.error("❌ headers:", err.response?.headers);
+  console.error("❌ body:", err.response?.data?.toString?.());
+  
   throw err;
 }
 
