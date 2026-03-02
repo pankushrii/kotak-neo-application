@@ -5,15 +5,16 @@ export function PlaceOrderForm({ onOrderPlaced }) {
   const [symbol, setSymbol] = useState("RELIANCE-EQ");
   const [qty, setQty] = useState(1);
   const [side, setSide] = useState("BUY");
-  const [product, setProduct] = useState("CNC"); // Change to MIS or NRML for F&O
+  const [product, setProduct] = useState("CNC");
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
 
   // Option Chain States
-  const [viewMode, setViewMode] = useState("SEARCH"); // SEARCH or OPTION_CHAIN
+  const [viewMode, setViewMode] = useState("SEARCH");
   const [optionIndex, setOptionIndex] = useState("NIFTY");
   const [chainData, setChainData] = useState([]);
   const [chainLoading, setChainLoading] = useState(false);
+  const [strikeFilter, setStrikeFilter] = useState(""); // Minimal search state
 
   const [suggestions, setSuggestions] = useState([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
@@ -21,7 +22,6 @@ export function PlaceOrderForm({ onOrderPlaced }) {
 
   const debounceRef = useRef(null);
 
-  // Effect for standard symbol search
   useEffect(() => {
     if (viewMode !== "SEARCH") return;
     const q = symbol.trim();
@@ -30,9 +30,7 @@ export function PlaceOrderForm({ onOrderPlaced }) {
       setShowSuggestions(false);
       return;
     }
-
     if (debounceRef.current) clearTimeout(debounceRef.current);
-
     debounceRef.current = setTimeout(async () => {
       setSearchLoading(true);
       try {
@@ -45,17 +43,14 @@ export function PlaceOrderForm({ onOrderPlaced }) {
         setSearchLoading(false);
       }
     }, 220);
-
     return () => debounceRef.current && clearTimeout(debounceRef.current);
   }, [symbol, viewMode]);
 
-  // Effect to fetch Option Chain
   useEffect(() => {
     if (viewMode !== "OPTION_CHAIN") return;
-
     const fetchChain = async () => {
       setChainLoading(true);
-      setMessage("Downloading/Filtering Scrip Master..."); // Important for the first load
+      setMessage("Loading Scrip Master...");
       try {
         const data = await ApiClient.getOptionChain(optionIndex);
         setChainData(data || []);
@@ -68,6 +63,12 @@ export function PlaceOrderForm({ onOrderPlaced }) {
     };
     fetchChain();
   }, [optionIndex, viewMode]);
+
+  // Filter chainData locally for the dropdown search
+  const filteredChain = chainData.filter(opt => 
+    opt.name.toLowerCase().includes(strikeFilter.toLowerCase()) ||
+    opt.trdSymbol.toLowerCase().includes(strikeFilter.toLowerCase())
+  );
 
   const submit = async () => {
     setLoading(true);
@@ -93,17 +94,8 @@ export function PlaceOrderForm({ onOrderPlaced }) {
       <div className="card-head">
         <h2>Place Order</h2>
         <div className="mode-toggle">
-          <button 
-            className={viewMode === "SEARCH" ? "active" : ""} 
-            onClick={() => setViewMode("SEARCH")}
-          >Search Stocks</button>
-          <button 
-            className={viewMode === "OPTION_CHAIN" ? "active" : ""} 
-            onClick={() => {
-              setViewMode("OPTION_CHAIN");
-              setProduct("NRML"); // Default to NRML for Options
-            }}
-          >Option Chain</button>
+          <button className={viewMode === "SEARCH" ? "active" : ""} onClick={() => setViewMode("SEARCH")}>Search Stocks</button>
+          <button className={viewMode === "OPTION_CHAIN" ? "active" : ""} onClick={() => { setViewMode("OPTION_CHAIN"); setProduct("NRML"); }}>Option Chain</button>
         </div>
       </div>
 
@@ -111,11 +103,7 @@ export function PlaceOrderForm({ onOrderPlaced }) {
         {viewMode === "SEARCH" ? (
           <div className="form-row symbol-field">
             <label>Search Symbol</label>
-            <input
-              value={symbol}
-              onChange={(e) => setSymbol(e.target.value)}
-              placeholder="e.g. RELIANCE-EQ"
-            />
+            <input value={symbol} onChange={(e) => setSymbol(e.target.value)} placeholder="e.g. RELIANCE-EQ" />
             {showSuggestions && suggestions.length > 0 && (
               <div className="suggest-box">
                 {suggestions.map((s, idx) => (
@@ -128,17 +116,29 @@ export function PlaceOrderForm({ onOrderPlaced }) {
           </div>
         ) : (
           <div className="form-row">
-            <label>Index & Strike</label>
-            <div className="chain-selector">
-              <select value={optionIndex} onChange={(e) => setOptionIndex(e.target.value)}>
+            <label>Index & Strike Search</label>
+            <div className="chain-selector" style={{ display: 'flex', gap: '5px', flexDirection: 'column' }}>
+              <select value={optionIndex} onChange={(e) => { setOptionIndex(e.target.value); setSymbol(""); }}>
                 <option value="NIFTY">NIFTY</option>
                 <option value="BANKNIFTY">BANKNIFTY</option>
                 <option value="SENSEX">SENSEX</option>
               </select>
+              
+              {/* Added minimal search input */}
+              <input 
+                type="text" 
+                placeholder="Filter strikes (e.g. 21500)" 
+                value={strikeFilter}
+                onChange={(e) => setStrikeFilter(e.target.value)}
+                style={{ padding: '8px', fontSize: '12px' }}
+              />
+
               <select value={symbol} onChange={(e) => setSymbol(e.target.value)}>
-                <option value="">-- Select Strike --</option>
-                {chainData.map((opt, idx) => (
-                  <option key={idx} value={opt.trdSymbol}>{opt.name}</option>
+                <option value="">-- {filteredChain.length} Strikes Found --</option>
+                {filteredChain.map((opt, idx) => (
+                  <option key={idx} value={opt.trdSymbol}>
+                    {opt.expiry} | {opt.name.split(' ').slice(-2).join(' ')} {/* Shows Expiry | Price Type */}
+                  </option>
                 ))}
               </select>
             </div>
@@ -149,15 +149,10 @@ export function PlaceOrderForm({ onOrderPlaced }) {
           <label>Quantity</label>
           <input type="number" value={qty} onChange={(e) => setQty(e.target.value)} />
         </div>
-
         <div className="form-row">
           <label>Side</label>
-          <select value={side} onChange={(e) => setSide(e.target.value)}>
-            <option value="BUY">Buy</option>
-            <option value="SELL">Sell</option>
-          </select>
+          <select value={side} onChange={(e) => setSide(e.target.value)}><option value="BUY">Buy</option><option value="SELL">Sell</option></select>
         </div>
-
         <div className="form-row">
           <label>Product</label>
           <select value={product} onChange={(e) => setProduct(e.target.value)}>
@@ -173,7 +168,6 @@ export function PlaceOrderForm({ onOrderPlaced }) {
           {loading ? "Processing..." : `${side} ${symbol || "Order"}`}
         </button>
       </div>
-
       {message && <p className="message">{message}</p>}
     </div>
   );
