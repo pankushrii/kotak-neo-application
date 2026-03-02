@@ -219,6 +219,32 @@ app.get("/api/symbols", async (req, res) => {
   }
 });
 
+// Add this route to api/index.js
+app.get("/api/option-chain", async (req, res) => {
+  try {
+    const { symbol } = req.query; // e.g., "NIFTY", "BANKNIFTY", "SENSEX"
+    if (!symbol) return res.status(400).json({ error: "Symbol is required" });
+
+    const session = getSessionFromReq(req);
+    const cache = await fetchMasterScripCsvAndCache(false, session);
+
+    // Filter for Option Index (OPTIDX) matching the symbol
+    // Kotak symbols usually look like "NIFTY27MAR2619500CE"
+    const results = cache.rows.filter(r => {
+      const name = (r.name || "").toUpperCase();
+      const trd = (r.trdSymbol || "").toUpperCase();
+      
+      // Basic heuristic: must contain index name and looks like an option
+      return (trd.startsWith(symbol.toUpperCase()) && 
+             (trd.endsWith("CE") || trd.endsWith("PE")));
+    });
+
+    // Grouping by expiry or sorting by strike can be done here
+    res.json(results.slice(0, 100)); 
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
 // Update standard routes to use cookies
 app.get("/api/orders", async (req, res) => {
   try {
