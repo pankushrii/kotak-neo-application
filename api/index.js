@@ -191,9 +191,6 @@ async function fetchMasterScripCsvAndCache(force) {
     return SCRIP_CACHE;
   }
 
-  if (!hasActiveSession()) {
-    throw new Error("No active session. Login first before downloading scrip master.");
-  }
 
   const baseUrl = baseUrlOrThrow();
   const headers = sessionHeadersOrThrow();
