@@ -53,7 +53,8 @@ function sessionHeadersOrThrow() {
     Accept: "application/json",
     "Content-Type": "application/json",
     "neo-fin-key": apiConfig.neoFinKey,
-    Auth: s.sessionToken
+    Auth: s.sessionToken,
+    Authorization: s.sessionToken,
   };
 
   if (s.sessionSid) headers.sid = s.sessionSid;
