@@ -17,20 +17,13 @@ const app = express();
 // --- Middleware Configuration ---
 app.use(cookieParser());
 app.use(cors({ 
-  origin: true, // Set this to your frontend URL in production
+  origin: true, 
   credentials: true 
 }));
 app.use(express.json());
-// Helper to extract session from cookies instead of memory
-function getSessionFromReq(req) {
-  return {
-    baseUrl: req.cookies.baseUrl,
-    sessionToken: req.cookies.sessionToken,
-    sessionSid: req.cookies.sessionSid
-  };
-}
+
 // --------------------
-// Scrip master cache (Stays in memory for the duration of the Lambda execution)
+// Scrip master cache
 // --------------------
 let SCRIP_CACHE = {
   updatedAt: 0,
@@ -41,20 +34,29 @@ let SCRIP_CACHE = {
 const CACHE_DURATION_MS = 24 * 60 * 60 * 1000;
 
 // --------------------
-// Session Helpers (Reading from Cookies)
+// Session Helpers
 // --------------------
-function getSessionFromRequest(req) {
-  return {
+function getSessionFromReq(req) {
+  const session = {
     baseUrl: req.cookies.baseUrl,
     sessionToken: req.cookies.sessionToken,
     sessionSid: req.cookies.sessionSid
   };
+  console.log("🍪 [Cookie Check]:", { 
+    hasBaseUrl: !!session.baseUrl, 
+    hasToken: !!session.sessionToken,
+    sid: session.sessionSid || "none" 
+  });
+  return session;
 }
 
 function sessionHeadersOrThrow(session) {
-  if (!session.sessionToken) throw new Error("No sessionToken. Login first.");
+  if (!session.sessionToken) {
+    console.error("❌ [Header Error]: sessionToken missing from session object");
+    throw new Error("No sessionToken. Login first.");
+  }
 
-  return {
+  const headers = {
     Accept: "application/json",
     "Content-Type": "application/json",
     "neo-fin-key": apiConfig.neoFinKey,
@@ -62,6 +64,8 @@ function sessionHeadersOrThrow(session) {
     Authorization: apiConfig.accessToken,
     ...(session.sessionSid && { sid: session.sessionSid })
   };
+  console.log("🛠️ [Headers Generated] (Auth/neo-fin-key present)");
+  return headers;
 }
 
 // --------------------
@@ -75,6 +79,7 @@ function extractStringsDeep(x, out) {
 }
 
 function chooseBestScripFileUrl(candidates, baseUrl) {
+  console.log(`🔍 https://www.wordwebonline.com/en/SELECTION: Analyzing ${candidates.length} candidates...`);
   const urls = candidates
     .filter(Boolean)
     .map((u) => {
@@ -85,72 +90,74 @@ function chooseBestScripFileUrl(candidates, baseUrl) {
     })
     .filter(Boolean);
 
-  const csvLike = urls.filter((u) => /\.csv(\.gz)?$/i.test(u));
-  const pool = csvLike.length ? csvLike : urls;
-  const preferred = pool.find((u) => /nse/i.test(u) && /(cm|cash|eq)/i.test(u) && /\.csv(\.gz)?$/i.test(u));
-  return preferred || pool[0] || null;
-}
-
-function parseCsvLine(line) {
-  const result = [];
-  let cur = "";
-  let inQuotes = false;
-  for (let i = 0; i < line.length; i++) {
-    const ch = line[i];
-    if (ch === '"') {
-      if (inQuotes && line[i + 1] === '"') { cur += '"'; i++; } 
-      else { inQuotes = !inQuotes; }
-      continue;
-    }
-    if (ch === "," && !inQuotes) { result.push(cur); cur = ""; continue; }
-    cur += ch;
-  }
-  result.push(cur);
-  return result.map((s) => s.trim());
+  const preferred = urls.find((u) => /nse/i.test(u) && /(cm|cash|eq)/i.test(u) && /\.csv(\.gz)?$/i.test(u));
+  const final = preferred || urls.find(u => /\.csv(\.gz)?$/i.test(u)) || urls[0];
+  console.log("🎯 https://www.selected.com/:", final);
+  return final;
 }
 
 function parseScripMasterCsv(csvText) {
+  console.log("📄 [Parser]: Starting CSV parse...");
   const lines = String(csvText).split(/\r?\n/).filter(Boolean);
   if (!lines.length) return [];
-  const header = parseCsvLine(lines[0]).map(h => h.replace(/^"|"$/g, ""));
-  const idx = (n) => header.findIndex(h => h.toLowerCase() === n.toLowerCase());
+  
+  // Minimal CSV parser logic
+  const header = lines[0].split(",").map(h => h.replace(/^"|"$/g, "").trim());
+  const iTrd = header.findIndex(h => /trdSym|pTrdSymbol|trading_symbol/i.test(h));
+  const iName = header.findIndex(h => /pSymbolName|name|pDesc/i.test(h));
 
-  const iTrd = [idx("pTrdSymbol"), idx("trdSym"), idx("trading_symbol")].find(i => i >= 0);
-  const iName = [idx("pSymbolName"), idx("name"), idx("pDesc")].find(i => i >= 0);
-  const iSeg = [idx("pExchSeg"), idx("exchange_segment"), idx("exchSeg")].find(i => i >= 0);
+  console.log(`📊 [Parser]: Found columns - trdSymbol idx: ${iTrd}, name idx: ${iName}`);
 
-  return lines.slice(1).map(line => {
-    const cols = parseCsvLine(line).map(v => v.replace(/^"|"$/g, ""));
+  const rows = lines.slice(1).map(line => {
+    const cols = line.split(",").map(v => v.replace(/^"|"$/g, "").trim());
     return {
-      trdSymbol: iTrd >= 0 ? cols[iTrd] : cols[1] || "",
-      name: iName >= 0 ? cols[iName] : cols[2] || "",
-      exchSeg: iSeg >= 0 ? cols[iSeg] : "nse_cm"
+      trdSymbol: cols[iTrd] || "",
+      name: cols[iName] || "",
+      exchSeg: "nse_cm"
     };
   }).filter(r => r.trdSymbol);
+
+  console.log(`✅ [Parser]: Successfully parsed ${rows.length} rows`);
+  return rows;
 }
 
 async function fetchMasterScripCsvAndCache(force, session) {
   const now = Date.now();
-  if (!force && SCRIP_CACHE.rows.length && (now - SCRIP_CACHE.updatedAt < CACHE_DURATION_MS)) {
+  const age = now - SCRIP_CACHE.updatedAt;
+
+  if (!force && SCRIP_CACHE.rows.length && age < CACHE_DURATION_MS) {
+    console.log(`⚡ [Cache Hit]: Using existing data (${SCRIP_CACHE.rows.length} rows, Age: ${Math.round(age/1000)}s)`);
     return SCRIP_CACHE;
   }
 
+  console.log("🌐 [Cache Miss/Force]: Fetching fresh Scrip Master...");
   const baseUrl = session.baseUrl;
   if (!baseUrl) throw new Error("No baseUrl in session. Login first.");
+  
   const headers = sessionHeadersOrThrow(session);
-
   const filePathsUrl = `${baseUrl}/script-details/1.0/masterscrip/file-paths`;
-  const filePathsResp = await axios.get(filePathsUrl, { headers });
 
+  console.log("🚀 [API Request]: GET file-paths...");
+  const filePathsResp = await axios.get(filePathsUrl, { headers });
+  
   const candidates = [];
   extractStringsDeep(filePathsResp.data, candidates);
   const chosenUrl = chooseBestScripFileUrl(candidates, baseUrl);
 
   if (!chosenUrl) throw new Error("Could not find CSV URL.");
 
+  console.log("📥 [Download]: Starting file download...");
   const dl = await axios.get(chosenUrl, { responseType: "arraybuffer", timeout: 120000 });
+  console.log(`📥 [Download]: Complete. Size: ${dl.data.length} bytes`);
+
   let bin = Buffer.from(dl.data);
-  let csvText = /\.gz$/i.test(chosenUrl) ? zlib.gunzipSync(bin).toString("utf-8") : bin.toString("utf-8");
+  let csvText;
+  if (/\.gz$/i.test(chosenUrl)) {
+    console.log("🧩 [Decompress]: Gunzipping .gz file...");
+    csvText = zlib.gunzipSync(bin).toString("utf-8");
+  } else {
+    csvText = bin.toString("utf-8");
+  }
 
   const rows = parseScripMasterCsv(csvText);
   SCRIP_CACHE = { updatedAt: now, rows, meta: { sourceUrl: chosenUrl, count: rows.length } };
@@ -160,18 +167,16 @@ async function fetchMasterScripCsvAndCache(force, session) {
 // --------------------
 // Routes
 // --------------------
-app.get("/api/health", (req, res) => res.json({ ok: true }));
 
 app.post("/api/auth/login", async (req, res) => {
+  console.log("🔑 [Login]: Attempting login with TOTP...");
   try {
     const { totp } = req.body;
-    if (!totp) return res.status(400).json({ error: "totp required" });
-
     const data = await loginWithTotp(totp);
 
     const cookieOptions = {
       httpOnly: true,
-      secure: true, // Set to false if testing on localhost without SSL
+      secure: true,
       sameSite: "none",
       maxAge: 24 * 60 * 60 * 1000
     };
@@ -180,33 +185,45 @@ app.post("/api/auth/login", async (req, res) => {
     res.cookie("baseUrl", data.baseUrl, cookieOptions);
     if (data.sessionSid) res.cookie("sessionSid", data.sessionSid, cookieOptions);
 
-    res.json({ success: true, ...data });
+    console.log("✅ [Login]: Success. Cookies set.");
+    res.json({ success: true });
   } catch (err) {
+    console.error("❌ [Login Error]:", err.message);
     res.status(500).json({ error: err.message });
   }
 });
 
-// Fixes the 404 in your second screenshot
 app.get("/api/auth/session", (req, res) => {
+  console.log("🔍 [Session Route]: Checking status...");
   const session = getSessionFromReq(req);
-  res.json({
-    hasSession: !!(session.sessionToken && session.baseUrl),
-  });
+  res.json({ hasSession: !!(session.sessionToken && session.baseUrl) });
 });
 
-app.post("/api/auth/logout", (req, res) => {
-  res.clearCookie("sessionToken");
-  res.clearCookie("baseUrl");
-  res.clearCookie("sessionSid");
-  res.json({ success: true });
+app.get("/api/option-chain", async (req, res) => {
+  const { symbol } = req.query;
+  console.log(`📈 [Option Chain]: Request for ${symbol}`);
+  try {
+    const session = getSessionFromReq(req);
+    const cache = await fetchMasterScripCsvAndCache(false, session);
+
+    const results = cache.rows.filter(r => {
+      const trd = r.trdSymbol.toUpperCase();
+      return trd.startsWith(symbol.toUpperCase()) && (trd.endsWith("CE") || trd.endsWith("PE"));
+    });
+
+    console.log(`📊 [Option Chain]: Found ${results.length} contracts for ${symbol}`);
+    res.json(results.slice(0, 100));
+  } catch (err) {
+    console.error("❌ [Option Chain Error]:", err.message);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 app.get("/api/symbols", async (req, res) => {
+  const q = (req.query.q || "").toString().trim().toUpperCase();
+  console.log(`🔎 [Symbol Search]: Query "${q}"`);
   try {
-    const session = getSessionFromRequest(req);
-    const q = (req.query.q || "").toString().trim().toUpperCase();
-    if (q.length < 2) return res.json([]);
-
+    const session = getSessionFromReq(req);
     const cache = await fetchMasterScripCsvAndCache(false, session);
     const matches = cache.rows
       .filter(r => r.trdSymbol.toUpperCase().includes(q) || r.name.toUpperCase().includes(q))
@@ -214,53 +231,10 @@ app.get("/api/symbols", async (req, res) => {
 
     res.json(matches);
   } catch (err) {
-    console.error("Symbol search failed:", err.message);
+    console.error("❌ [Symbol Error]:", err.message);
     res.status(401).json({ error: err.message });
   }
 });
 
-// Add this route to api/index.js
-app.get("/api/option-chain", async (req, res) => {
-  try {
-    const { symbol } = req.query; // e.g., "NIFTY", "BANKNIFTY", "SENSEX"
-    if (!symbol) return res.status(400).json({ error: "Symbol is required" });
-
-    const session = getSessionFromReq(req);
-    const cache = await fetchMasterScripCsvAndCache(false, session);
-
-    // Filter for Option Index (OPTIDX) matching the symbol
-    // Kotak symbols usually look like "NIFTY27MAR2619500CE"
-    const results = cache.rows.filter(r => {
-      const name = (r.name || "").toUpperCase();
-      const trd = (r.trdSymbol || "").toUpperCase();
-      
-      // Basic heuristic: must contain index name and looks like an option
-      return (trd.startsWith(symbol.toUpperCase()) && 
-             (trd.endsWith("CE") || trd.endsWith("PE")));
-    });
-
-    // Grouping by expiry or sorting by strike can be done here
-    res.json(results.slice(0, 100)); 
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-// Update standard routes to use cookies
-app.get("/api/orders", async (req, res) => {
-  try {
-    // Note: getOrders() in kotakClient needs to be updated to accept session 
-    // or you can manually call axios here using sessionHeadersOrThrow(getSessionFromRequest(req))
-    const data = await getOrders(); 
-    res.json(data);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// Local dev only
-if (process.env.NODE_ENV === "development") {
-  const port = process.env.PORT || 3001;
-  app.listen(port, () => console.log("API listening on", port));
-}
-
+// For Vercel
 module.exports = app;
