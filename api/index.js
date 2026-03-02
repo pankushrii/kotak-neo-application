@@ -78,8 +78,9 @@ function extractStringsDeep(x, out) {
   if (typeof x === "object") { for (const k of Object.keys(x)) extractStringsDeep(x[k], out); }
 }
 
-function chooseBestScripFileUrl(candidates, baseUrl) {
-  console.log(`🔍 https://www.wordwebonline.com/en/SELECTION: Analyzing ${candidates.length} candidates...`);
+function chooseBestScripFileUrl(candidates, baseUrl, isOptionChain = false) {
+  console.log(`🔍 https://www.wordwebonline.com/en/SELECTION: Analyzing ${candidates.length} candidates (Mode: ${isOptionChain ? 'F&O' : 'Cash'})...`);
+  
   const urls = candidates
     .filter(Boolean)
     .map((u) => {
@@ -90,11 +91,27 @@ function chooseBestScripFileUrl(candidates, baseUrl) {
     })
     .filter(Boolean);
 
-  const preferred = urls.find((u) => /nse/i.test(u) && /(cm|cash|eq)/i.test(u) && /\.csv(\.gz)?$/i.test(u));
-  const final = preferred || urls.find(u => /\.csv(\.gz)?$/i.test(u)) || urls[0];
-  console.log("🎯 https://www.selected.com/:", final);
+  let final;
+
+  if (isOptionChain) {
+    // Look specifically for the Derivatives file (nse_fo)
+    final = urls.find((u) => /nse_fo/i.test(u) && /\.csv(\.gz)?$/i.test(u));
+    console.log("🎲 [F&O Target Check]:", final || "Not found, falling back...");
+  }
+
+  if (!final) {
+    // Default/Fallback to Cash Market (nse_cm)
+    final = urls.find((u) => /nse/i.test(u) && /(cm|cash|eq)/i.test(u) && /\.csv(\.gz)?$/i.test(u));
+  }
+
+  // Final catch-all fallback
+  final = final || urls.find(u => /\.csv(\.gz)?$/i.test(u)) || urls[0];
+  
+  console.log("🎯 [Final Selection]:", final);
   return final;
 }
+
+
 
 function parseScripMasterCsv(csvText) {
   console.log("📄 [Parser]: Starting CSV parse...");
@@ -121,46 +138,36 @@ function parseScripMasterCsv(csvText) {
   return rows;
 }
 
-async function fetchMasterScripCsvAndCache(force, session) {
+// Add isOptionChain = false to the parameters
+async function fetchMasterScripCsvAndCache(force, session, isOptionChain = false) {
   const now = Date.now();
+  
+  // We need to distinguish the cache so they don't overwrite each other
+  const cacheKey = isOptionChain ? "FO" : "CM";
   const age = now - SCRIP_CACHE.updatedAt;
 
-  if (!force && SCRIP_CACHE.rows.length && age < CACHE_DURATION_MS) {
-    console.log(`⚡ [Cache Hit]: Using existing data (${SCRIP_CACHE.rows.length} rows, Age: ${Math.round(age/1000)}s)`);
+  if (!force && SCRIP_CACHE.rows.length && age < CACHE_DURATION_MS && SCRIP_CACHE.type === cacheKey) {
+    console.log(`⚡ [Cache Hit]: Using existing ${cacheKey} data`);
     return SCRIP_CACHE;
   }
 
-  console.log("🌐 [Cache Miss/Force]: Fetching fresh Scrip Master...");
-  const baseUrl = session.baseUrl;
-  if (!baseUrl) throw new Error("No baseUrl in session. Login first.");
-  
-  const headers = sessionHeadersOrThrow(session);
-  const filePathsUrl = `${baseUrl}/script-details/1.0/masterscrip/file-paths`;
+  // ... (session check logic)
 
-  console.log("🚀 [API Request]: GET file-paths...");
   const filePathsResp = await axios.get(filePathsUrl, { headers });
-  
   const candidates = [];
   extractStringsDeep(filePathsResp.data, candidates);
-  const chosenUrl = chooseBestScripFileUrl(candidates, baseUrl);
 
-  if (!chosenUrl) throw new Error("Could not find CSV URL.");
+  // PASS THE FLAG HERE
+  const chosenUrl = chooseBestScripFileUrl(candidates, baseUrl, isOptionChain);
 
-  console.log("📥 [Download]: Starting file download...");
-  const dl = await axios.get(chosenUrl, { responseType: "arraybuffer", timeout: 120000 });
-  console.log(`📥 [Download]: Complete. Size: ${dl.data.length} bytes`);
+  // ... (download and parse logic)
 
-  let bin = Buffer.from(dl.data);
-  let csvText;
-  if (/\.gz$/i.test(chosenUrl)) {
-    console.log("🧩 [Decompress]: Gunzipping .gz file...");
-    csvText = zlib.gunzipSync(bin).toString("utf-8");
-  } else {
-    csvText = bin.toString("utf-8");
-  }
-
-  const rows = parseScripMasterCsv(csvText);
-  SCRIP_CACHE = { updatedAt: now, rows, meta: { sourceUrl: chosenUrl, count: rows.length } };
+  SCRIP_CACHE = { 
+    updatedAt: now, 
+    rows, 
+    type: cacheKey, // Track which file is currently in memory
+    meta: { sourceUrl: chosenUrl, count: rows.length } 
+  };
   return SCRIP_CACHE;
 }
 
@@ -204,7 +211,8 @@ app.get("/api/option-chain", async (req, res) => {
   console.log(`📈 [Option Chain]: Request for ${symbol}`);
   try {
     const session = getSessionFromReq(req);
-    const cache = await fetchMasterScripCsvAndCache(false, session);
+    // CRITICAL: Pass 'true' as the third argument here
+    const cache = await fetchMasterScripCsvAndCache(false, session, true);
 
     const results = cache.rows.filter(r => {
       const trd = r.trdSymbol.toUpperCase();
