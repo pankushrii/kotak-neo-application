@@ -13,21 +13,10 @@ app.use(cookieParser());
 app.use(cors({ origin: true, credentials: true }));
 app.use(express.json());
 
-// --------------------
-// Global Cache State
-// --------------------
-let SCRIP_CACHE = {
-  updatedAt: 0,
-  rows: [],
-  type: null, // Tracks if currently loaded file is "CM" (Cash) or "FO" (F&O)
-  meta: { sourceUrl: null, count: 0 }
-};
-
+let SCRIP_CACHE = { updatedAt: 0, rows: [], type: null, meta: { sourceUrl: null, count: 0 } };
 const CACHE_DURATION_MS = 24 * 60 * 60 * 1000;
 
-// --------------------
-// Helpers
-// --------------------
+// --- Session Helpers ---
 function getSessionFromReq(req) {
   return {
     baseUrl: req.cookies.baseUrl,
@@ -48,7 +37,8 @@ function sessionHeadersOrThrow(session) {
   };
 }
 
-// Fixed selection logic to prioritize F&O file for Option Chain
+// --- Scrip Master Utilities ---
+
 function chooseBestScripFileUrl(candidates, baseUrl, isOptionChain) {
   const urls = candidates.filter(Boolean).map(u => {
     const s = String(u).trim();
@@ -57,16 +47,13 @@ function chooseBestScripFileUrl(candidates, baseUrl, isOptionChain) {
   });
 
   if (isOptionChain) {
-    // Look specifically for nse_fo (Derivatives)
+    // Priority for nse_fo.csv for derivatives
     const foFile = urls.find(u => /nse_fo/i.test(u) || /nfo/i.test(u));
     if (foFile) return foFile;
   }
-
-  // Fallback to Cash Market
   return urls.find(u => /nse_cm/i.test(u) || /eq/i.test(u)) || urls[0];
 }
 
-// Recursively extract all strings from API response
 function extractStringsDeep(x, out) {
   if (!x) return;
   if (typeof x === "string") { out.push(x); return; }
@@ -74,11 +61,46 @@ function extractStringsDeep(x, out) {
   if (typeof x === "object") { for (const k of Object.keys(x)) extractStringsDeep(x[k], out); }
 }
 
+/**
+ * CORE PARSER: Extracts Index Options and Expiry
+ */
+function parseScripMasterCsv(csvText, isOptionChain) {
+  const lines = csvText.split(/\r?\n/).filter(Boolean);
+  if (lines.length < 2) return [];
+
+  const header = lines[0].split(",").map(h => h.replace(/^"|"$/g, "").trim());
+  const iTrd = header.findIndex(h => /trdSym|pTrdSymbol|trading_symbol/i.test(h));
+  const iName = header.findIndex(h => /pSymbolName|name|pDesc/i.test(h));
+  const iInst = header.findIndex(h => /pInstType|instrument_type/i.test(h));
+
+  return lines.slice(1).map(line => {
+    const cols = line.split(",").map(v => v.replace(/^"|"$/g, "").trim());
+    const trdSymbol = cols[iTrd] || "";
+    const instType = iInst >= 0 ? cols[iInst] : "";
+
+    // If fetching Options, only keep Index Options (OPTIDX)
+    if (isOptionChain && instType !== "OPTIDX") return null;
+
+    let expiry = "";
+    if (isOptionChain && trdSymbol) {
+      // Extract expiry date code from symbol (e.g., 25N11 from NIFTY25N11...)
+      const match = trdSymbol.match(/\d{2}[A-Z1-9]{3}/);
+      expiry = match ? match[0] : "";
+    }
+
+    return {
+      trdSymbol,
+      name: cols[iName] || "",
+      expiry,
+      exchSeg: isOptionChain ? "nse_fo" : "nse_cm"
+    };
+  }).filter(r => r !== null && r.trdSymbol);
+}
+
 async function fetchMasterScripCsvAndCache(force, session, isOptionChain = false) {
   const now = Date.now();
   const targetType = isOptionChain ? "FO" : "CM";
   
-  // Use cache only if type matches and it's fresh
   if (!force && SCRIP_CACHE.rows.length && SCRIP_CACHE.type === targetType && (now - SCRIP_CACHE.updatedAt < CACHE_DURATION_MS)) {
     console.log(`⚡ [Cache Hit]: Using ${targetType} data`);
     return SCRIP_CACHE;
@@ -88,46 +110,20 @@ async function fetchMasterScripCsvAndCache(force, session, isOptionChain = false
   if (!baseUrl) throw new Error("No baseUrl in session. Login first.");
   const headers = sessionHeadersOrThrow(session);
 
-  // FIXED: Explicitly define filePathsUrl before use
   const filePathsUrl = `${baseUrl}/script-details/1.0/masterscrip/file-paths`;
-  console.log(`🚀 [API Request]: Fetching paths from ${filePathsUrl}`);
-  
   const filePathsResp = await axios.get(filePathsUrl, { headers });
+  
   const candidates = [];
   extractStringsDeep(filePathsResp.data, candidates);
-  
   const chosenUrl = chooseBestScripFileUrl(candidates, baseUrl, isOptionChain);
-  console.log(`🎯 [File Selected]: ${chosenUrl}`);
 
   const dl = await axios.get(chosenUrl, { responseType: "arraybuffer", timeout: 120000 });
   let bin = Buffer.from(dl.data);
   let csvText = /\.gz$/i.test(chosenUrl) ? zlib.gunzipSync(bin).toString("utf-8") : bin.toString("utf-8");
 
-  // Parse Lines
-  const lines = csvText.split(/\r?\n/).filter(Boolean);
-  const header = lines[0].split(",").map(h => h.replace(/^"|"$/g, "").trim());
-  const iTrd = header.findIndex(h => /trdSym|pTrdSymbol|trading_symbol/i.test(h));
-  const iName = header.findIndex(h => /pSymbolName|name|pDesc/i.test(h));
+  // Call the newly defined parser
+  const rows = parseScripMasterCsv(csvText, isOptionChain);
 
-  const rows = lines.slice(1).map(line => {
-    const cols = line.split(",").map(v => v.replace(/^"|"$/g, "").trim());
-    const trdSymbol = cols[iTrd] || "";
-
-    // --- MINIMAL CHANGE: Extract Expiry ---
-    let expiry = "";
-    if (isOptionChain && trdSymbol) {
-      // Matches pattern like 26MAR26 or 05MAR26
-      const match = trdSymbol.match(/\d{2}[A-Z]{3}\d{2}/);
-      expiry = match ? match[0] : "";
-    }
-    return {
-      trdSymbol,
-      name: cols[iName] || "",
-      expiry, // Now included in the response
-      exchSeg: isOptionChain ? "nse_fo" : "nse_cm"
-    };
-  }).filter(r => r.trdSymbol);
-  
   SCRIP_CACHE = { 
     updatedAt: now, 
     rows, 
@@ -137,9 +133,23 @@ async function fetchMasterScripCsvAndCache(force, session, isOptionChain = false
   return SCRIP_CACHE;
 }
 
-// --------------------
-// Endpoints
-// --------------------
+// --- Endpoints ---
+
+app.get("/api/option-chain", async (req, res) => {
+  try {
+    const { symbol } = req.query; // e.g. BANKNIFTY
+    const session = getSessionFromReq(req);
+    const cache = await fetchMasterScripCsvAndCache(false, session, true);
+
+    const filtered = cache.rows.filter(r => {
+      const ts = r.trdSymbol.toUpperCase();
+      return ts.startsWith(symbol.toUpperCase()) && (ts.endsWith("CE") || ts.endsWith("PE"));
+    });
+
+    console.log(`📊 [Option Chain]: Found ${filtered.length} Index Options for ${symbol}`);
+    res.json(filtered.slice(0, 150));
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
 
 app.post("/api/auth/login", async (req, res) => {
   try {
@@ -155,24 +165,6 @@ app.post("/api/auth/login", async (req, res) => {
 app.get("/api/auth/session", (req, res) => {
   const s = getSessionFromReq(req);
   res.json({ hasSession: !!(s.sessionToken && s.baseUrl) });
-});
-
-app.get("/api/option-chain", async (req, res) => {
-  try {
-    const { symbol } = req.query; // e.g. NIFTY
-    const session = getSessionFromReq(req);
-    // Force isOptionChain = true to get the NFO file
-    const cache = await fetchMasterScripCsvAndCache(false, session, true);
-
-    const filtered = cache.rows.filter(r => {
-      const ts = r.trdSymbol.toUpperCase();
-      // Match Index name and ensure it ends with CE or PE
-      return ts.startsWith(symbol.toUpperCase()) && (ts.endsWith("CE") || ts.endsWith("PE"));
-    });
-
-    console.log(`📊 [Option Chain]: Found ${filtered.length} strikes for ${symbol}`);
-    res.json(filtered.slice(0, 150));
-  } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 app.get("/api/symbols", async (req, res) => {
