@@ -179,6 +179,14 @@ app.post("/api/auth/login", async (req, res) => {
   }
 });
 
+// Fixes the 404 in your second screenshot
+app.get("/api/auth/session", (req, res) => {
+  const session = getSessionFromReq(req);
+  res.json({
+    hasSession: !!(session.sessionToken && session.baseUrl),
+  });
+});
+
 app.post("/api/auth/logout", (req, res) => {
   res.clearCookie("sessionToken");
   res.clearCookie("baseUrl");
