@@ -137,18 +137,32 @@ async function fetchMasterScripCsvAndCache(force, session, isOptionChain = false
 
 app.get("/api/option-chain", async (req, res) => {
   try {
-    const { symbol } = req.query; // e.g. BANKNIFTY
+    const { symbol } = req.query; // Expects "NIFTY" or "BANKNIFTY"
     const session = getSessionFromReq(req);
+    
+    // Ensure we are hitting the F&O master file
     const cache = await fetchMasterScripCsvAndCache(false, session, true);
+
+    // Get current month code (e.g., "MAR")
+    const currentMonth = new Date().toLocaleString('en-us', { month: 'short' }).toUpperCase();
 
     const filtered = cache.rows.filter(r => {
       const ts = r.trdSymbol.toUpperCase();
-      return ts.startsWith(symbol.toUpperCase()) && (ts.endsWith("CE") || ts.endsWith("PE"));
+      const isCorrectIndex = ts.startsWith("NIFTY") || ts.startsWith("BANKNIFTY");
+      
+      // Filter for current month and specific index
+      // Matches symbols like NIFTY26MAR26...
+      const isCurrentMonth = r.expiry.includes(currentMonth);
+      const isCallOrPut = ts.endsWith("CE") || ts.endsWith("PE");
+
+      return isCorrectIndex && isCurrentMonth && isCallOrPut;
     });
 
-    console.log(`📊 [Option Chain]: Found ${filtered.length} Index Options for ${symbol}`);
-    res.json(filtered.slice(0, 150));
-  } catch (err) { res.status(500).json({ error: err.message }); }
+    console.log(`📊 [Option Chain]: Found ${filtered.length} ${currentMonth} contracts for NIFTY/BANKNIFTY`);
+    res.json(filtered.slice(0, 200));
+  } catch (err) { 
+    res.status(500).json({ error: err.message }); 
+  }
 });
 
 app.post("/api/auth/login", async (req, res) => {
