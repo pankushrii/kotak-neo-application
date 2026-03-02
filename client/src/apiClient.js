@@ -34,4 +34,14 @@ export const ApiClient = {
       .get("/symbols", { params: { q: query } })
       .then((r) => r.data);
   }
+  /**
+   * Fetches Option Chain for a specific index
+   * @param {string} symbol - "NIFTY", "BANKNIFTY", or "SENSEX"
+   */
+  getOptionChain(symbol) {
+    console.log(`📈 [Frontend]: Fetching Option Chain for ${symbol}...`);
+    return api
+      .get("/option-chain", { params: { symbol } })
+      .then((r) => r.data);
+  }
 };
