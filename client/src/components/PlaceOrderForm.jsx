@@ -16,7 +16,7 @@ export function PlaceOrderForm({ onOrderPlaced }) {
   // --- UI & View State ---
   const [viewMode, setViewMode] = useState("SEARCH");
   const [loading, setLoading] = useState(false);
-  const [message, setMessage] = useState({ text: "", type: "" }); // type: "success" or "error"
+  const [message, setMessage] = useState({ text: "", type: "" }); 
 
   // --- Option Chain State ---
   const [optionIndex, setOptionIndex] = useState("NIFTY");
@@ -67,7 +67,7 @@ export function PlaceOrderForm({ onOrderPlaced }) {
     fetchChain();
   }, [optionIndex, viewMode, spotPrice]);
 
-  // 3. Live LTP Fetching (Immediate + Polls every 5s)
+  // 3. Live LTP Fetching (Fetches ONCE on selection change)
   useEffect(() => {
     if (!symbol) {
       setLtp(null);
@@ -82,17 +82,14 @@ export function PlaceOrderForm({ onOrderPlaced }) {
 
         if (selectedOpt && selectedOpt.token) {
           
-          // Show a loading indicator immediately if we don't have a price yet
-          setLtp(prev => prev ? prev : "..."); 
+          setLtp("..."); // Immediate loading state
 
           const data = await ApiClient.getPrice(selectedOpt.token, selectedOpt.exchSeg || selectedOpt.exch || "nse_fo");
           
-          // Robustly extract the price based on Kotak's array response
           const latestPrice = data?.data?.[0]?.ltp || data?.success?.[0]?.lastPrice || data?.[0]?.ltp;
           
           if (latestPrice) {
             setLtp(latestPrice);
-            // Auto-fill the price input if Market is selected
             if (priceType === "MKT") setPrice(latestPrice);
           } else {
             setLtp("N/A");
@@ -104,12 +101,10 @@ export function PlaceOrderForm({ onOrderPlaced }) {
       }
     };
 
-    // 1. Fetch immediately as soon as the dropdown changes
     fetchPrice();
-
+    
   }, [symbol, chainData, viewMode, priceType]);
 
-  // Filter option chain based on user input
   const filteredChain = chainData.filter(opt => 
     opt.trdSymbol.toLowerCase().includes(strikeFilter.toLowerCase())
   );
@@ -137,7 +132,7 @@ export function PlaceOrderForm({ onOrderPlaced }) {
     }
   };
 
-return (
+  return (
     <div className="container" style={{ padding: '0px' }}>
       <div className="card">
         {/* Card Header & View Toggle */}
@@ -223,6 +218,34 @@ return (
             </div>
           )}
 
+          {/* --- NEW: PROMINENT LIVE QUOTE BAR --- */}
+          {symbol && (
+            <div style={{
+              gridColumn: '1 / -1', /* Spans the entire width of the form grid */
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              padding: '14px 18px',
+              background: 'rgba(59, 130, 246, 0.08)', /* Subtle blue tint */
+              border: '1px solid rgba(59, 130, 246, 0.25)',
+              borderRadius: '8px',
+              marginTop: '4px',
+              marginBottom: '4px'
+            }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <span style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px', fontWeight: 600 }}>Instrument</span>
+                <span style={{ fontSize: '15px', fontWeight: '600', color: 'var(--text-main)' }}>{symbol}</span>
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '4px' }}>
+                <span style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px', fontWeight: 600 }}>Live Price (LTP)</span>
+                <span style={{ fontSize: '20px', fontWeight: '700', color: '#10b981' }}>
+                  {ltp === "..." ? "Fetching..." : ltp === "N/A" || !ltp ? "₹0.00" : `₹${ltp}`}
+                </span>
+              </div>
+            </div>
+          )}
+          {/* --------------------------------------- */}
+
           {/* Section 2: Order Details */}
           <div className="form-row">
             <label>Quantity</label>
@@ -238,9 +261,7 @@ return (
           </div>
 
           <div className="form-row">
-            <label>
-              Price {ltp && <span style={{color: '#3b82f6', fontWeight: 600}}> (LTP: ₹{ltp})</span>}
-            </label>
+            <label>Price</label>
             <input 
               type="number" 
               step="0.05"
