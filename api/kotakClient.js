@@ -86,18 +86,23 @@ function sessionHeaders() {
     throw new Error("No session. Login first.");
   }
 
-  // v2: use Auth header for session token, no Authorization for quick APIs
-  const headers = {
+  // Session-based headers for quick APIs
+function sessionHeaders(session) {
+  const token = session?.sessionToken;
+  const sid = session?.sessionSid;
+
+  if (!token) {
+    throw new Error("No session. Login first.");
+  }
+
+  return {
     "Content-Type": "application/json",
     Accept: "application/json",
     "neo-fin-key": apiConfig.neoFinKey,
-    Auth: sessionToken
+    Auth: token,
+    ...(sid && sid !== "none" && { sid })
   };
-
-  if (sessionSid) headers.sid = sessionSid;
-  return headers;
 }
-
 
 // Updated baseUrl to accept a session object
 function baseUrlOrThrow(session) {
