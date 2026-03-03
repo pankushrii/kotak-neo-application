@@ -235,8 +235,6 @@ app.post("/api/place-order", async (req, res) => {
 
     console.log("🍪 [Incoming Cookies]:", JSON.stringify(req.cookies));
 
-  const session = getSessionFromReq(req);
-  
   // LOG 2: Check parsed session object
   console.log("👤 [Parsed Session]:", {
     hasToken: !!session.sessionToken,
