@@ -191,6 +191,7 @@ async function getOrders(session) {
 }
 
 async function getPositions(session) {
+  console.log("getPositions inside KotakCLient");
   const baseUrl = baseUrlOrThrow(session);
   const url = `${baseUrl}/quick/user/positions`; // v2 endpoint
   const res = await axios.get(url, { headers: sessionHeaders() });
