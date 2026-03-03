@@ -107,7 +107,6 @@ function parseScripMasterCsv(csvText, isOptionChain) {
 async function fetchMasterScripCsvAndCache(force, session, isOptionChain = false) {
   console.log("fetchMasterScripCsvAndCache called");
   const now = Date.now();
-  force=true;
   const targetType = isOptionChain ? "FO" : "CM";
   
   if (!force && SCRIP_CACHE.rows.length && SCRIP_CACHE.type === targetType && (now - SCRIP_CACHE.updatedAt < CACHE_DURATION_MS)) {
@@ -201,7 +200,7 @@ app.get("/api/option-chain", async (req, res) => {
     const range = 2000;
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-
+    console.log("Cache data",Cache);
     // 1. Precise Filter: Match Index + DDMMMYY + Strike (Decimal) + CE/PE
     const instrumentRegex = new RegExp(`^${symbol.toUpperCase()}(\\d{2}[A-Z]{3}\\d{2})(\\d+\\.\\d{2})(CE|PE)$`);
 
