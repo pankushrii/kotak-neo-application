@@ -349,6 +349,7 @@ app.get("/api/positions", async (req, res) => {
     } else {
       console.error("❌ [Positions Local Error]:", err.message);
     }
+    console.error("❌ [Positions  Error]:", err);
     res.status(500).json({ error: err.message });
   }
 });
