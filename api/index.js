@@ -219,13 +219,13 @@ app.get("/api/option-chain", async (req, res) => {
       strike: r.token.match(/(\d+)\.\d{2}/)[1],
       type: r.token.endsWith('CE') ? 'CE' : 'PE'
     }));
-    conosle.log("processed data",processed);
+    console.log("processed data",processed);
     // 3. Sort by Date and get the next 2 unique dates
     const futureRows = processed
       .filter(r => r.dateObj >= today)
       .sort((a, b) => a.dateObj - b.dateObj);
     
-    conosle.log("futureRows data",futureRows);
+    console.log("futureRows data",futureRows);
     
     const uniqueDates = [...new Set(futureRows.map(r => r.dateObj.getTime()))].slice(0, 2);
 
