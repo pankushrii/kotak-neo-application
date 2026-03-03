@@ -15,13 +15,14 @@ export function PlaceOrderForm({ onOrderPlaced }) {
   const [chainData, setChainData] = useState([]);
   const [chainLoading, setChainLoading] = useState(false);
   const [strikeFilter, setStrikeFilter] = useState("");
+  
+  // --- UPDATED SPOT PRICES FOR 2026 ---
+  const [spotPrice, setSpotPrice] = useState(25000); 
+  const [ltp, setLtp] = useState(null); // To show live price of selected strike
 
   const [suggestions, setSuggestions] = useState([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [searchLoading, setSearchLoading] = useState(false);
-
-  // --- NEW STATE FOR SPOT PRICE ---
-  const [spotPrice, setSpotPrice] = useState(25000); 
 
   const debounceRef = useRef(null);
 
@@ -55,7 +56,7 @@ export function PlaceOrderForm({ onOrderPlaced }) {
       setChainLoading(true);
       setMessage("Loading Scrip Master...");
       try {
-        // --- UPDATED CALL TO PASS SPOT PRICE ---
+        // Pass both index and spotPrice to backend for ±2000 range filtering
         const data = await ApiClient.getOptionChain(optionIndex, spotPrice);
         setChainData(data || []);
         setMessage("");
@@ -66,7 +67,22 @@ export function PlaceOrderForm({ onOrderPlaced }) {
       }
     };
     fetchChain();
-  }, [optionIndex, viewMode, spotPrice]); // Added spotPrice dependency
+  }, [optionIndex, viewMode, spotPrice]);
+
+  // --- FETCH LIVE PRICE OF SELECTED STRIKE ---
+  useEffect(() => {
+    if (viewMode !== "OPTION_CHAIN" || !symbol) return;
+    
+    const selectedOpt = chainData.find(o => o.trdSymbol === symbol);
+    if (selectedOpt && selectedOpt.token) {
+      ApiClient.getPrice(selectedOpt.token, selectedOpt.exchSeg)
+        .then(data => {
+          const price = data?.data?.[0]?.ltp;
+          setLtp(price);
+        })
+        .catch(() => setLtp(null));
+    }
+  }, [symbol, chainData, viewMode]);
 
   const filteredChain = chainData.filter(opt => 
     opt.name.toLowerCase().includes(strikeFilter.toLowerCase()) ||
@@ -121,17 +137,27 @@ export function PlaceOrderForm({ onOrderPlaced }) {
           <div className="form-row">
             <label>Index & Strike Search</label>
             <div className="chain-selector" style={{ display: 'flex', gap: '5px', flexDirection: 'column' }}>
-              <select value={optionIndex} onChange={(e) => { 
-                setOptionIndex(e.target.value); 
-                setSymbol(""); 
-                // Suggestion: Update spotPrice based on index selection here if needed
-                if(e.target.value === "BANKNIFTY") setSpotPrice(48000);
-                else setSpotPrice(23000);
-              }}>
-                <option value="NIFTY">NIFTY</option>
-                <option value="BANKNIFTY">BANKNIFTY</option>
-                {/* SENSEX removed as requested (Nifty and BankNifty only) */}
-              </select>
+              <div style={{ display: 'flex', gap: '5px' }}>
+                <select style={{ flex: 1 }} value={optionIndex} onChange={(e) => { 
+                  setOptionIndex(e.target.value); 
+                  setSymbol(""); 
+                  setLtp(null);
+                  if(e.target.value === "BANKNIFTY") setSpotPrice(60000);
+                  else setSpotPrice(25000);
+                }}>
+                  <option value="NIFTY">NIFTY</option>
+                  <option value="BANKNIFTY">BANKNIFTY</option>
+                </select>
+
+                {/* Manual Spot Price Input to center the ±2000 range */}
+                <input 
+                  style={{ flex: 1, padding: '8px', fontSize: '12px' }}
+                  type="number"
+                  placeholder="Spot Price"
+                  value={spotPrice}
+                  onChange={(e) => setSpotPrice(Number(e.target.value))}
+                />
+              </div>
               
               <input 
                 type="text" 
@@ -144,11 +170,18 @@ export function PlaceOrderForm({ onOrderPlaced }) {
               <select value={symbol} onChange={(e) => setSymbol(e.target.value)}>
                 <option value="">-- {filteredChain.length} Strikes Found --</option>
                 {filteredChain.map((opt, idx) => (
-            <option key={idx} value={opt.trdSymbol}>
-            {opt.trdSymbol.startsWith("NIFTY") ? "NIFTY" : "BANKNIFTY"} | {opt.expiry} | STRIKE: {opt.name.split(' ').slice(-2, -1)} | {opt.name.slice(-2)}
-            </option>
+                  <option key={idx} value={opt.trdSymbol}>
+                    {opt.trdSymbol.startsWith("NIFTY") ? "NIFTY" : "BANKNIFTY"} | {opt.expiry} | STRIKE: {opt.name.split(' ').slice(-2, -1)} | {opt.name.slice(-2)}
+                  </option>
                 ))}
               </select>
+
+              {/* Upfront Price Visibility */}
+              {ltp !== null && (
+                <div style={{ padding: '10px', background: '#f0f7ff', borderRadius: '4px', border: '1px solid #cce3ff', marginTop: '5px' }}>
+                   <strong style={{ color: '#004085' }}>Live LTP: ₹{ltp}</strong>
+                </div>
+              )}
             </div>
           </div>
         )}
