@@ -71,6 +71,7 @@ export function PlaceOrderForm({ onOrderPlaced }) {
   useEffect(() => {
     if (!symbol) {
       setLtp(null);
+      setPrice("");
       return;
     }
     
@@ -82,7 +83,8 @@ export function PlaceOrderForm({ onOrderPlaced }) {
 
         if (selectedOpt && selectedOpt.token) {
           
-          setLtp("..."); // Immediate loading state
+          setLtp("..."); // Show loading state in label
+          setPrice("");  // Clear input box temporarily
 
           const data = await ApiClient.getPrice(selectedOpt.token, selectedOpt.exchSeg || selectedOpt.exch || "nse_fo");
           
@@ -90,7 +92,8 @@ export function PlaceOrderForm({ onOrderPlaced }) {
           
           if (latestPrice) {
             setLtp(latestPrice);
-            if (priceType === "MKT") setPrice(latestPrice);
+            // AUTO-FILL the price input box automatically!
+            setPrice(latestPrice); 
           } else {
             setLtp("N/A");
           }
@@ -103,7 +106,7 @@ export function PlaceOrderForm({ onOrderPlaced }) {
 
     fetchPrice();
     
-  }, [symbol, chainData, viewMode, priceType]);
+  }, [symbol, chainData, viewMode]);
 
   const filteredChain = chainData.filter(opt => 
     opt.trdSymbol.toLowerCase().includes(strikeFilter.toLowerCase())
@@ -120,7 +123,7 @@ export function PlaceOrderForm({ onOrderPlaced }) {
         side,
         product,
         priceType,
-        price: priceType === "MKT" ? ltp : Number(price),
+        price: Number(price),
         ltp
       });
       setMessage({ text: `Order placed successfully! ID: ${res.data?.success?.NSE?.orderId || 'Confirmed'}`, type: "success" });
@@ -218,34 +221,6 @@ export function PlaceOrderForm({ onOrderPlaced }) {
             </div>
           )}
 
-          {/* --- NEW: PROMINENT LIVE QUOTE BAR --- */}
-          {symbol && (
-            <div style={{
-              gridColumn: '1 / -1', /* Spans the entire width of the form grid */
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              padding: '14px 18px',
-              background: 'rgba(59, 130, 246, 0.08)', /* Subtle blue tint */
-              border: '1px solid rgba(59, 130, 246, 0.25)',
-              borderRadius: '8px',
-              marginTop: '4px',
-              marginBottom: '4px'
-            }}>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                <span style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px', fontWeight: 600 }}>Instrument</span>
-                <span style={{ fontSize: '15px', fontWeight: '600', color: 'var(--text-main)' }}>{symbol}</span>
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '4px' }}>
-                <span style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px', fontWeight: 600 }}>Live Price (LTP)</span>
-                <span style={{ fontSize: '20px', fontWeight: '700', color: '#10b981' }}>
-                  {ltp === "..." ? "Fetching..." : ltp === "N/A" || !ltp ? "₹0.00" : `₹${ltp}`}
-                </span>
-              </div>
-            </div>
-          )}
-          {/* --------------------------------------- */}
-
           {/* Section 2: Order Details */}
           <div className="form-row">
             <label>Quantity</label>
@@ -260,15 +235,18 @@ export function PlaceOrderForm({ onOrderPlaced }) {
             </select>
           </div>
 
+          {/* The Price Field gets auto-populated by the setPrice(latestPrice) logic above */}
           <div className="form-row">
-            <label>Price</label>
+            <label>
+              Price {ltp && ltp !== "..." && ltp !== "N/A" && <span style={{color: '#10b981', fontWeight: 600}}> (LTP: ₹{ltp})</span>}
+            </label>
             <input 
               type="number" 
               step="0.05"
               value={price} 
               onChange={(e) => setPrice(e.target.value)} 
               disabled={priceType === "MKT"}
-              placeholder={priceType === "MKT" ? "Auto-filled at LTP" : "Enter Limit Price"}
+              placeholder={ltp === "..." ? "Fetching..." : "Enter Limit Price"}
             />
           </div>
 
