@@ -136,7 +136,7 @@ async function placeOrder(uiPayload,session) {
     pf: 'N',
     pr: '0', // 0 for MKT orders
     pt: 'MKT',
-    qt: uiPayload.quantity.toString(),
+    qt: "65",
     rt: 'DAY',
     tp: '0',
     ts: uiPayload.trading_symbol,
