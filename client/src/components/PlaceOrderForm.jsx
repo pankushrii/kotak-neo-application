@@ -205,15 +205,21 @@ export function PlaceOrderForm({ onOrderPlaced }) {
                 <select value={symbol} onChange={(e) => setSymbol(e.target.value)}>
                   <option value="">-- Select from {filteredChain.length} Strikes --</option>
                   {filteredChain.map((opt, idx) => {
-                    const strikeMatch = opt.trdSymbol.match(/(\d+)(CE|PE)$/);
-                    const displayStrike = strikeMatch ? strikeMatch[1] : "N/A";
-                    const displayType = strikeMatch ? strikeMatch[2] : "";
-                    return (
-                      <option key={idx} value={opt.trdSymbol}>
-                        {opt.expiry} | STRIKE: {displayStrike} | {displayType}
-                      </option>
-                    );
-                  })}
+  const strikeMatch = opt.trdSymbol.match(/(\d+)(CE|PE)$/);
+  const type = strikeMatch ? strikeMatch[2] : "";
+  const strike = strikeMatch ? strikeMatch[1] : "";
+  
+  // Format the date for the label (e.g., from 2026-03-05 to "05 Mar")
+  const displayDate = new Date(opt.dateObj).toLocaleDateString('en-GB', {
+    day: '2-digit', month: 'short'
+  });
+
+  return (
+    <option key={idx} value={opt.trdSymbol}>
+      {displayDate} | {strike} {type}
+    </option>
+  );
+})}
                 </select>
               </div>
             </div>
