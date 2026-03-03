@@ -149,14 +149,14 @@ async function placeOrder(uiPayload,session) {
     "kotakPayload":kotakPayload
   });
   const url = `${baseUrl}/quick/order/rule/ms/place`; // v2 endpoint
-  const res = await axios.post(url, payload, { headers: sessionHeaders() });
+  const res = await axios.post(url, kotakPayload, { headers: sessionHeaders(session) });
   return res.data;
 }
 
 async function getOrders(session) {
   const baseUrl = baseUrlOrThrow(session);
   const url = `${baseUrl}/quick/user/orders`; // v2 endpoint
-  const res = await axios.get(url, { headers: sessionHeaders() });
+  const res = await axios.get(url, { headers: sessionHeaders(session) });
   return res.data;
 }
 
