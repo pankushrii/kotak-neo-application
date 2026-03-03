@@ -169,10 +169,29 @@ function parseExpiry(trdSymbol, indexName) {
   return new Date(year, monthIdx, 28); 
 }
 
+/**
+ * Parser for pScripRefKey format: DDMMMYY (e.g., 07APR26)
+ */
+function parseExpiryFromScrip(scripRef) {
+  // Regex looks for 2 digits, 3 letters, 2 digits (e.g., 07APR26)
+  const match = scripRef.toUpperCase().match(/(\d{2})([A-Z]{3})(\d{2})/);
+  if (!match) return new Date(2099, 0, 1);
+
+  const day = parseInt(match[1]);
+  const monthStr = match[2];
+  const year = 2000 + parseInt(match[3]);
+
+  const months = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
+  const monthIdx = months.indexOf(monthStr);
+
+  return new Date(year, monthIdx, day);
+}
+
 app.get("/api/option-chain", async (req, res) => {
   try {
     const { symbol, spotPrice } = req.query;
     const session = getSessionFromReq(req);
+    // Fetching FO data
     const cache = await fetchMasterScripCsvAndCache(false, session, true);
 
     const spot = parseFloat(spotPrice);
@@ -180,83 +199,47 @@ app.get("/api/option-chain", async (req, res) => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
-    // 1. Filter by Index and Strike Range
-    let rows = cache.rows.filter(r => {
-      const ts = r.trdSymbol.toUpperCase();
-      if (!ts.startsWith(symbol.toUpperCase())) return false;
+    // 1. Precise Filter: Match Index + DDMMMYY + Strike (Decimal) + CE/PE
+    const instrumentRegex = new RegExp(`^${symbol.toUpperCase()}(\\d{2}[A-Z]{3}\\d{2})(\\d+\\.\\d{2})(CE|PE)$`);
+
+    let rows = cache.rows.map(r => {
+      // We use pScripRefKey here as requested
+      const scrip = (r.pScripRefKey || r.trdSymbol).toUpperCase(); 
+      const match = scrip.match(instrumentRegex);
       
-      const strikeMatch = ts.match(/(\d+)(CE|PE)$/);
-      if (!strikeMatch) return false;
-      const strike = parseFloat(strikeMatch[1]);
-      return strike >= (spot - range) && strike <= (spot + range);
-    });
+      if (!match) return null;
 
-    // 2. Attach real Date objects for sorting
-    rows = rows.map(r => ({ ...r, dateObj: parseExpiry(r.trdSymbol, symbol) }));
+      const strike = parseFloat(match[2]);
+      // Filter by Strike Range (± 2000)
+      if (strike < (spot - range) || strike > (spot + range)) return null;
 
-    // 3. Filter out expired ones and sort
-    rows = rows.filter(r => r.dateObj >= today).sort((a, b) => a.dateObj - b.dateObj);
+      return {
+        ...r,
+        strike,
+        type: match[3],
+        dateObj: parseExpiryFromScrip(scrip),
+        displaySymbol: scrip
+      };
+    }).filter(Boolean);
 
-    // 4. Get the first two unique expiry dates
-    const uniqueExpiries = [...new Set(rows.map(r => r.dateObj.getTime()))].slice(0, 2);
+    // 2. Sort chronologically and remove expired
+    const sortedRows = rows
+      .filter(r => r.dateObj >= today)
+      .sort((a, b) => a.dateObj - b.dateObj);
 
-    // 5. Only return rows matching those two dates
-    const finalData = rows.filter(r => uniqueExpiries.includes(r.dateObj.getTime()));
+    // 3. Logic for "Next 2 Expiries"
+    const uniqueTimestamps = [...new Set(sortedRows.map(r => r.dateObj.getTime()))].slice(0, 2);
 
+    // 4. Final filter: Keep only instruments belonging to those two dates
+    const finalData = sortedRows.filter(r => uniqueTimestamps.includes(r.dateObj.getTime()));
+
+    console.log(`🎯 [Option Chain] Found ${finalData.length} contracts for the next 2 expiries.`);
     res.json(finalData);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
-// --- Endpoints ---
-app.get("/api/option-chain-1", async (req, res) => {
-  try {
-    const { symbol, spotPrice } = req.query; // spotPrice passed from frontend
-    const session = getSessionFromReq(req);
-    console.log(`📈 [Frontend]: Fetching Option Chain for ${symbol} around ${spotPrice}...`);
-    const cache = await fetchMasterScripCsvAndCache(false, session, true);
 
-    if (!symbol || !spotPrice) {
-      return res.status(400).json({ error: "Symbol and spotPrice are required" });
-    }
-
-    const currentMonth = new Date().toLocaleString('en-us', { month: 'short' }).toUpperCase();
-    const spot = parseFloat(spotPrice);
-    const range = 2000;
-
-    const filtered = cache.rows.filter(r => {
-      const ts = r.trdSymbol.toUpperCase();
-      
-      // 1. Must be the requested Index
-      if (!ts.startsWith(symbol.toUpperCase())) return false;
-      
-      // 2. Must be Current Month
-      if (!r.expiry.includes(currentMonth)) return false;
-
-      // 3. Extract Strike Price from symbol (e.g., NIFTY26MAR2619500CE -> 19500)
-      // Regex looks for digits between the date and the CE/PE suffix
-      const strikeMatch = ts.match(/[A-Z](\d+)(?:CE|PE)$/);
-      if (!strikeMatch) return false;
-      
-      const strike = parseFloat(strikeMatch[1]);
-
-      // 4. Check if Strike is within ± 2000 points
-      return strike >= (spot - range) && strike <= (spot + range);
-    });
-
-    // Sort by Strike Price for a better UI experience
-    filtered.sort((a, b) => {
-      const strikeA = parseInt(a.trdSymbol.match(/\d+(?=CE|PE)/));
-      const strikeB = parseInt(b.trdSymbol.match(/\d+(?=CE|PE)/));
-      return strikeA - strikeB;
-    });
-
-    console.log(`📊 [Option Chain]: Found ${filtered.length} strikes for ${symbol} within ±2000 range.`);
-    res.json(filtered);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
 
 app.post("/api/auth/login", async (req, res) => {
   try {
