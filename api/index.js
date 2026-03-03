@@ -233,6 +233,16 @@ app.post("/api/place-order", async (req, res) => {
     const session = getSessionFromReq(req);
     const orderData = req.body; // {trading_symbol, quantity, side, product}
 
+    console.log("🍪 [Incoming Cookies]:", JSON.stringify(req.cookies));
+
+  const session = getSessionFromReq(req);
+  
+  // LOG 2: Check parsed session object
+  console.log("👤 [Parsed Session]:", {
+    hasToken: !!session.sessionToken,
+    hasBaseUrl: !!session.baseUrl,
+    sid: session.sessionSid || 'none'
+  });
     console.log("📦 [API]: Placing order for", orderData.trading_symbol);
     
     // Call your Kotak Client logic
