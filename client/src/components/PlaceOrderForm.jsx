@@ -93,6 +93,8 @@ export function PlaceOrderForm({ onOrderPlaced }) {
     setLoading(true);
     setMessage("");
     try {
+      console.log("Placeing order on submit");
+      
       const res = await ApiClient.placeOrder({
         trading_symbol: symbol.trim(),
         quantity: Number(qty),
@@ -102,6 +104,7 @@ export function PlaceOrderForm({ onOrderPlaced }) {
       setMessage("Order placed successfully.");
       if (onOrderPlaced) onOrderPlaced(res);
     } catch (e) {
+      console.log("Placeing order on submit Error",e);
       setMessage(e?.response?.data?.error || e.message || "Order failed.");
     } finally {
       setLoading(false);
