@@ -154,7 +154,7 @@ const jData = {
   console.log("🚀 [Kotak Client]: Sending jData:", JSON.stringify(jData));
 
   try {
-    const res = await axios.post(url, params, { 
+    const res = await axios.post(baseUrl, params, { 
       headers: sessionHeaders(session) 
     });
     return res.data;
