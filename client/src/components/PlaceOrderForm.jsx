@@ -144,9 +144,9 @@ export function PlaceOrderForm({ onOrderPlaced }) {
               <select value={symbol} onChange={(e) => setSymbol(e.target.value)}>
                 <option value="">-- {filteredChain.length} Strikes Found --</option>
                 {filteredChain.map((opt, idx) => (
-                  <option key={idx} value={opt.trdSymbol}>
-                    {opt.expiry} | {opt.name.split(' ').slice(-2).join(' ')}
-                  </option>
+            <option key={idx} value={opt.trdSymbol}>
+            {opt.trdSymbol.startsWith("NIFTY") ? "NIFTY" : "BANKNIFTY"} | {opt.expiry} | STRIKE: {opt.name.split(' ').slice(-2, -1)} | {opt.name.slice(-2)}
+            </option>
                 ))}
               </select>
             </div>
