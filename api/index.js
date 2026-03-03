@@ -236,6 +236,7 @@ app.get("/api/option-chain", async (req, res) => {
     console.log(`🎯 [Option Chain] Found ${finalData.length} contracts for the next 2 expiries.`);
     res.json(finalData);
   } catch (err) {
+    console.error("Error from get option chain",err);
     res.status(500).json({ error: err.message });
   }
 });
