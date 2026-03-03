@@ -85,6 +85,7 @@ function sessionHeaders() {
   if (!sessionToken) {
     throw new Error("No session. Login first.");
   }
+}
 
   // Session-based headers for quick APIs
 function sessionHeaders(session) {
