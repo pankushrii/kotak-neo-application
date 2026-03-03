@@ -228,7 +228,7 @@ app.post("/api/get-strike-prices", async (req, res) => {
 });
 
 // Ensure this specific route exists
-app.post("/api/orders", async (req, res) => {
+app.post("/api/place-orders", async (req, res) => {
   try {
     const session = getSessionFromReq(req);
     const orderData = req.body; // {trading_symbol, quantity, side, product}
