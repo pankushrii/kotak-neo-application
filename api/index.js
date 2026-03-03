@@ -325,7 +325,7 @@ app.get("/api/positions", async (req, res) => {
     const cleanBaseUrl = session.baseUrl.replace(/\/$/, "");
     const url = `${cleanBaseUrl}/portfolio/v1/positions`;
     
-    console.log("📂 [Positions] Fetching from:", url);
+    console.log("📂 [Positions] Fetching from:", url+ "Headers ",headers);
     // console.log("🔑 [Positions] Headers:", JSON.stringify(headers)); // Uncomment for deep auth debugging
 
     const response = await axios.get(url, { headers });
