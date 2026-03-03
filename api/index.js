@@ -193,47 +193,52 @@ app.get("/api/option-chain", async (req, res) => {
     const session = getSessionFromReq(req);
     const cache = await fetchMasterScripCsvAndCache(false, session, true);
 
+    // --- DIAGNOSTIC LOG START ---
+    if (cache.rows.length > 0) {
+      console.log("📝 [Diagnostic] Total Rows:", cache.rows.length);
+      console.log("📝 [Diagnostic] Keys found in Row 0:", Object.keys(cache.rows[0]));
+      
+      // Look for the first row that even mentions NIFTY to see what its 'name' is
+      const sampleNifty = cache.rows.find(r => 
+        JSON.stringify(r).toUpperCase().includes("NIFTY")
+      );
+      console.log("📝 [Diagnostic] Sample NIFTY Row Data:", JSON.stringify(sampleNifty));
+    }
+    // --- DIAGNOSTIC LOG END ---
+
     const spot = parseFloat(spotPrice);
     const range = 2000;
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
-    const processed = cache.rows.map((r, index) => {
-      // 1. Robust Name Check (Handle spaces/case)
-      const rowName = (r.name || "").toString().trim().toUpperCase();
+    const processed = cache.rows.map((r) => {
+      // 1. Try to find the name in multiple possible keys
+      const rowName = (r.name || r.pSymbolName || "").toString().trim().toUpperCase();
       const targetName = symbol.trim().toUpperCase();
       
+      // 2. Try to find the token/scrip string in multiple possible keys
+      const scripStr = (r.token || r.pScripRefKey || r.trdSymbol || "").toString().toUpperCase();
+
       if (rowName !== targetName) return null;
 
-      // 2. Ultra-Flexible Regex for Strike
-      // This looks for ANY digits at the end of the string before CE/PE
-      // It handles: 22350.00CE, 22350CE, 22350.0CE
-      const tokenStr = (r.token || "").toUpperCase();
-      const strikeMatch = tokenStr.match(/(\d+)(?:\.\d+)?(CE|PE)$/);
-      
-      // DEBUG: Log the first 5 NIFTY rows to see why they might fail
-      if (index < 50 && rowName === "NIFTY" && !strikeMatch) {
-         console.log(`⚠️ Regex Failed on: "${tokenStr}"`);
-      }
-
+      // 3. Flexible Regex for Strike: Looking for numbers before CE/PE
+      const strikeMatch = scripStr.match(/(\d+)(?:\.\d+)?(CE|PE)$/);
       if (!strikeMatch) return null;
 
       const strikeValue = parseFloat(strikeMatch[1]);
-      
-      // 3. Strike Range Check
       if (strikeValue < (spot - range) || strikeValue > (spot + range)) return null;
 
       return {
         ...r,
         strike: strikeValue,
         type: strikeMatch[2],
-        dateObj: parseExpiryFromToken(tokenStr)
+        dateObj: parseExpiryFromToken(scripStr),
+        scripStr // useful for debugging
       };
     }).filter(Boolean);
 
     console.log(`✅ [Step 1] Matches after Name/Strike filter: ${processed.length}`);
 
-    // ... (rest of the sorting and uniqueDates logic)
     const futureRows = processed
       .filter(r => r.dateObj >= today)
       .sort((a, b) => a.dateObj - b.dateObj);
@@ -246,8 +251,6 @@ app.get("/api/option-chain", async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
-
-
 app.post("/api/auth/login", async (req, res) => {
   try {
     const data = await loginWithTotp(req.body.totp);
