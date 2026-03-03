@@ -105,6 +105,7 @@ function parseScripMasterCsv(csvText, isOptionChain) {
 }
 
 async function fetchMasterScripCsvAndCache(force, session, isOptionChain = false) {
+  console.log("fetchMasterScripCsvAndCache called");
   const now = Date.now();
   force=true;
   const targetType = isOptionChain ? "FO" : "CM";
@@ -120,7 +121,7 @@ async function fetchMasterScripCsvAndCache(force, session, isOptionChain = false
 
   const filePathsUrl = `${baseUrl}/script-details/1.0/masterscrip/file-paths`;
   const filePathsResp = await axios.get(filePathsUrl, { headers });
-  
+  console.log("fetchMasterScripCsvAndCache Filepathresp");
   const candidates = [];
   extractStringsDeep(filePathsResp.data, candidates);
   const chosenUrl = chooseBestScripFileUrl(candidates, baseUrl, isOptionChain);
