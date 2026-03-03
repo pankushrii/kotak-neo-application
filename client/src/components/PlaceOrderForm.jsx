@@ -78,56 +78,34 @@ export function PlaceOrderForm({ onOrderPlaced }) {
       return;
     }
     
-    const fetchPrice = async () => {
-      try {
-        console.log("🔍 Looking for symbol in data:", symbol);
-        
-        // Find the full instrument object based on the current viewMode
-        const selectedOpt = viewMode === "OPTION_CHAIN" 
-          ? chainData.find(o => o.trdSymbol === symbol) 
-          : suggestions.find(o => o.trdSymbol === symbol);
+  
+      const fetchPrice = async () => {
+  try {
+    const selectedOpt = viewMode === "OPTION_CHAIN" 
+      ? chainData.find(o => o.trdSymbol === symbol) 
+      : suggestions.find(o => o.trdSymbol === symbol);
 
-        console.log("📦 Found Instrument Data:", selectedOpt);
+    if (!selectedOpt || !selectedOpt.pSymbol) {
+      console.warn("⚠️ No pSymbol found for selection");
+      return;
+    }
 
-        if (!selectedOpt) {
-          console.error("❌ Could not find instrument object in chainData/suggestions!");
-          return;
-        }
+    setLtp("...");
+    
+    // Switch to GET request with query params
+    const res = await ApiClient.getPrice(selectedOpt.pSymbol, selectedOpt.exchSeg || "nse_fo");
+    
+    // Parse the nested price (adjust based on actual API response structure)
+    const latestPrice = res?.data?.[0]?.ltp || res?.success?.[0]?.lastPrice || res?.[0]?.ltp;
 
-        if (!selectedOpt.token && !selectedOpt.instrumentToken) {
-          console.error("❌ Instrument object is missing the 'token' property needed for fetching price!");
-          return;
-        }
-
-        // Determine the correct token variable name (some Kotak endpoints use 'instrumentToken' instead of 'token')
-        const targetToken = selectedOpt.token || selectedOpt.instrumentToken;
-        const targetExchange = selectedOpt.exchSeg || selectedOpt.exch || "nse_fo";
-
-        console.log(`🌐 Fetching price for Token: ${targetToken}, Exchange: ${targetExchange}`);
-        
-        setLtp("..."); // Show loading state in UI
-        setPrice("");  
-
-        // Call your backend API
-        const data = await ApiClient.getPrice(targetToken, targetExchange);
-        console.log("📥 Raw Price API Response:", data);
-        
-        // Extract the price (Kotak sends it nested depending on the exact route)
-        const latestPrice = data?.data?.[0]?.ltp || data?.success?.[0]?.lastPrice || data?.[0]?.ltp;
-        
-        if (latestPrice) {
-          console.log("✅ Successfully extracted Price:", latestPrice);
-          setLtp(latestPrice);
-          setPrice(latestPrice); // Auto-fill the price input
-        } else {
-          console.warn("⚠️ Price fetch succeeded, but could not parse 'ltp' from response.");
-          setLtp("N/A");
-        }
-        
-      } catch (err) {
-        console.error("❌ LTP Fetch API Request Failed:", err);
-        setLtp("Error");
-      }
+    if (latestPrice) {
+      setLtp(latestPrice);
+      setPrice(latestPrice);
+    }
+  } catch (err) {
+    setLtp("Error");
+  }
+};
     };
 
     fetchPrice();
