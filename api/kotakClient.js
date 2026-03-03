@@ -110,7 +110,7 @@ function baseUrlOrThrow(session) {
 
 async function placeOrder(payload,session) {
   console.log ("Calling Place Order from Kotak Client",payload +"Session",session);
-  const baseUrl = baseUrlOrThrow();
+  const baseUrl = baseUrlOrThrow(session);
   const url = `${baseUrl}/quick/order/rule/ms/place`; // v2 endpoint
   const res = await axios.post(url, payload, { headers: sessionHeaders() });
   return res.data;
