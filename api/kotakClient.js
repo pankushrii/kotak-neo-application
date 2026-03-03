@@ -12,7 +12,7 @@ const MPIN_VALIDATE_URL = `${FIXED_LOGIN_BASE}/login/1.0/tradeApiValidate`;
 // Access-token headers (short token from Neo dashboard)
 function accessHeaders() {
   return {
-    "Content-Type": "application/x-www-form-urlencoded", 
+    "Content-Type": "application/json", 
     "Accept": "application/json",
     // v2: plain token (no Bearer) in Authorization for access token
     Authorization: apiConfig.accessToken,
@@ -98,7 +98,7 @@ function sessionHeaders(session) {
   }
 
   return {
-    "Content-Type": "application/x-www-form-urlencoded",
+    "Content-Type": "application/json",
     "Accept": "application/json",
     "neo-fin-key": apiConfig.neoFinKey,
     Auth: token,
