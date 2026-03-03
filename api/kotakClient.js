@@ -152,20 +152,20 @@ async function placeOrder(uiPayload,session) {
     jData.tlt = uiPayload.tlt || 'N';
     jData.tsv = uiPayload.tsv || '0';
   }
-  // LOG 4: Check final headers being sent to Kotak
- // IMPORTANT: Wrap in jData and use URLSearchParams for x-www-form-urlencoded
-  const params = new URLSearchParams();
-  params.append("jData", JSON.stringify(jData));
+  // 3. Form Encoding logic exactly like your working example
+  const formBody = new URLSearchParams({
+    jData: JSON.stringify(jData),
+  }).toString();
 
   console.log("🚀 [Kotak Client]: Sending jData:", JSON.stringify(jData));
+  console.log('🚀 [Kotak Client] Sending formBody:', formBody);
 
   try {
-    const res = await axios.post(url, params, { 
+    const res = await axios.post(url, formBody, { 
       headers: sessionHeaders(session) 
     });
     return res.data;
   } catch (err) {
-        console.log("❌ [Kotak Rejection]:", JSON.stringify(err.response?.data || err.message));
     console.error("❌ [Kotak Rejection]:", JSON.stringify(err.response?.data || err.message));
     throw err;
   }
