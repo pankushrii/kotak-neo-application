@@ -209,4 +209,21 @@ app.get("/api/symbols", async (req, res) => {
   } catch (err) { res.status(401).json({ error: err.message }); }
 });
 
+// Add to api/index.js
+app.post("/api/get-strike-prices", async (req, res) => {
+  try {
+    const { instrumentTokens } = req.body; // e.g., [{instrument_token: "53179", exchange_segment: "nse_fo"}]
+    const session = getSessionFromReq(req);
+    const headers = sessionHeadersOrThrow(session);
+
+    // Call Kotak Neo Quotes API
+    const response = await axios.post(`${session.baseUrl}/quotes/v1/ltp`, {
+      instrument_tokens: instrumentTokens
+    }, { headers });
+
+    res.json(response.data);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
 module.exports = app;
