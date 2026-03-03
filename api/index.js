@@ -323,7 +323,7 @@ app.get("/api/positions", async (req, res) => {
     
     // Construct and log the URL
     const cleanBaseUrl = session.baseUrl.replace(/\/$/, "");
-    const url = `${cleanBaseUrl}/portfolio/v1/positions`;
+    const url = `${cleanBaseUrl}/quick/user/positions`;
     
     console.log("📂 [Positions] Fetching from:", url+ "Headers ",headers);
     // console.log("🔑 [Positions] Headers:", JSON.stringify(headers)); // Uncomment for deep auth debugging
