@@ -2,33 +2,34 @@ import React, { useEffect, useRef, useState } from "react";
 import { ApiClient } from "../apiClient";
 
 export function PlaceOrderForm({ onOrderPlaced }) {
+  // --- Core Form State ---
   const [symbol, setSymbol] = useState("");
   const [qty, setQty] = useState(1);
   const [side, setSide] = useState("BUY");
   const [product, setProduct] = useState("CNC");
-  const [loading, setLoading] = useState(false);
-  const [message, setMessage] = useState("");
-
-  // --- NEW: Price & Price Type States ---
+  
+  // --- Price & Order Type State ---
   const [priceType, setPriceType] = useState("MKT");
   const [price, setPrice] = useState("");
   const [ltp, setLtp] = useState(null);
 
-  // Option Chain States
+  // --- UI & View State ---
   const [viewMode, setViewMode] = useState("SEARCH");
-  const [optionIndex, setOptionIndex] = useState("NIFTY");
-  const [chainData, setChainData] = useState([]);
-  const [chainLoading, setChainLoading] = useState(false);
-  const [strikeFilter, setStrikeFilter] = useState("");
-  const [spotPrice, setSpotPrice] = useState(25000); 
+  const [loading, setLoading] = useState(false);
+  const [message, setMessage] = useState({ text: "", type: "" }); // type: "success" or "error"
 
+  // --- Option Chain State ---
+  const [optionIndex, setOptionIndex] = useState("NIFTY");
+  const [spotPrice, setSpotPrice] = useState(25000); 
+  const [chainData, setChainData] = useState([]);
+  const [strikeFilter, setStrikeFilter] = useState("");
+
+  // --- Search & Suggestion State ---
   const [suggestions, setSuggestions] = useState([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
-  const [searchLoading, setSearchLoading] = useState(false);
-
   const debounceRef = useRef(null);
 
-  // Symbol Search Logic
+  // 1. Symbol Search Logic (Debounced)
   useEffect(() => {
     if (viewMode !== "SEARCH") return;
     const q = symbol.trim();
@@ -37,56 +38,56 @@ export function PlaceOrderForm({ onOrderPlaced }) {
       setShowSuggestions(false);
       return;
     }
+    
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(async () => {
-      setSearchLoading(true);
       try {
         const data = await ApiClient.searchSymbols(q);
         setSuggestions(data || []);
         setShowSuggestions(true);
       } catch (err) {
         setSuggestions([]);
-      } finally {
-        setSearchLoading(false);
       }
-    }, 220);
+    }, 250);
+    
     return () => debounceRef.current && clearTimeout(debounceRef.current);
   }, [symbol, viewMode]);
 
-  // Option Chain Fetching
+  // 2. Option Chain Fetching
   useEffect(() => {
     if (viewMode !== "OPTION_CHAIN") return;
     const fetchChain = async () => {
-      setChainLoading(true);
       try {
         const data = await ApiClient.getOptionChain(optionIndex, spotPrice);
         setChainData(data || []);
       } catch (err) {
-        setMessage("Failed to load option chain.");
-      } finally {
-        setChainLoading(false);
+        setMessage({ text: "Failed to load option chain.", type: "error" });
       }
     };
     fetchChain();
   }, [optionIndex, viewMode, spotPrice]);
 
-  // Live LTP Fetching (Polls every 5 seconds)
+  // 3. Live LTP Fetching (Polls every 5 seconds)
   useEffect(() => {
-    if (!symbol) return;
+    if (!symbol) {
+      setLtp(null);
+      return;
+    }
     
     const fetchPrice = async () => {
       try {
-        // Find token for selected strike if in Option Chain mode
         const selectedOpt = viewMode === "OPTION_CHAIN" 
           ? chainData.find(o => o.trdSymbol === symbol) 
           : suggestions.find(o => o.trdSymbol === symbol);
 
         if (selectedOpt && selectedOpt.token) {
           const data = await ApiClient.getPrice(selectedOpt.token, selectedOpt.exchSeg || selectedOpt.exch);
-          const latestPrice = data?.data?.[0]?.ltp;
-          setLtp(latestPrice);
-          // Auto-fill price if Market is selected to ensure reference price exists
-          if (priceType === "MKT") setPrice(latestPrice);
+          const latestPrice = data?.lastPrice || data?.data?.[0]?.ltp;
+          
+          if (latestPrice) {
+            setLtp(latestPrice);
+            if (priceType === "MKT") setPrice(latestPrice);
+          }
         }
       } catch (err) {
         console.error("LTP Fetch error", err);
@@ -96,156 +97,193 @@ export function PlaceOrderForm({ onOrderPlaced }) {
     fetchPrice();
     const interval = setInterval(fetchPrice, 5000);
     return () => clearInterval(interval);
-  }, [symbol, chainData, viewMode, priceType]);
+  }, [symbol, chainData, viewMode, priceType, suggestions]);
 
+  // Filter option chain based on user input
   const filteredChain = chainData.filter(opt => 
     opt.trdSymbol.toLowerCase().includes(strikeFilter.toLowerCase())
   );
 
+  // 4. Submit Order
   const submit = async () => {
     setLoading(true);
-    setMessage("");
+    setMessage({ text: "", type: "" });
     try {
       const res = await ApiClient.placeOrder({
         trading_symbol: symbol.trim(),
         quantity: Number(qty),
         side,
         product,
-        // Pass price data to backend
+        priceType,
         price: priceType === "MKT" ? ltp : Number(price),
-        priceType: "LMT" // Forced to LMT in backend logic to prevent 1041 rejection
+        ltp
       });
-      setMessage("Order placed successfully.");
+      setMessage({ text: `Order placed successfully! ID: ${res.data?.success?.NSE?.orderId || 'Confirmed'}`, type: "success" });
       if (onOrderPlaced) onOrderPlaced(res);
     } catch (e) {
-      setMessage(e?.response?.data?.error || e.message || "Order failed.");
+      setMessage({ text: e?.response?.data?.error || e.message || "Order failed.", type: "error" });
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="card">
-      <div className="card-head">
-        <h2>Place Order</h2>
-        <div className="mode-toggle">
-          <button className={viewMode === "SEARCH" ? "active" : ""} onClick={() => { setViewMode("SEARCH"); setSymbol(""); }}>Search Stocks</button>
-          <button className={viewMode === "OPTION_CHAIN" ? "active" : ""} onClick={() => { setViewMode("OPTION_CHAIN"); setProduct("NRML"); setSymbol(""); }}>Option Chain</button>
-        </div>
+    <div className="container">
+      {/* Top Dashboard Navigation */}
+      <div className="nav-tabs">
+        <button className="nav-btn active">Trade</button>
+        <button className="nav-btn">Positions</button>
+        <button className="nav-btn">Orders</button>
       </div>
 
-      <div className="form-grid">
-        {viewMode === "SEARCH" ? (
-          <div className="form-row symbol-field">
-            <label>Search Symbol</label>
-            <input value={symbol} onChange={(e) => setSymbol(e.target.value)} placeholder="e.g. RELIANCE-EQ" />
-            {showSuggestions && suggestions.length > 0 && (
-              <div className="suggest-box">
-                {suggestions.map((s, idx) => (
-                  <div key={idx} className="suggest-item" onClick={() => { setSymbol(s.trdSymbol); setShowSuggestions(false); }}>
-                    {s.trdSymbol} <small>{s.name}</small>
-                  </div>
-                ))}
-              </div>
-            )}
+      <div className="card">
+        {/* Card Header & View Toggle */}
+        <div className="card-head">
+          <h2>Place Order</h2>
+          <div className="mode-toggle">
+            <button 
+              className={viewMode === "SEARCH" ? "active" : ""} 
+              onClick={() => { setViewMode("SEARCH"); setSymbol(""); setShowSuggestions(false); }}
+            >
+              Search Stocks
+            </button>
+            <button 
+              className={viewMode === "OPTION_CHAIN" ? "active" : ""} 
+              onClick={() => { setViewMode("OPTION_CHAIN"); setProduct("NRML"); setSymbol(""); }}
+            >
+              Option Chain
+            </button>
           </div>
-        ) : (
-          <div className="form-row">
-            <label>Index & Strike Search</label>
-            <div className="chain-selector" style={{ display: 'flex', gap: '5px', flexDirection: 'column' }}>
-              <div style={{ display: 'flex', gap: '5px' }}>
-                <select style={{ flex: 1 }} value={optionIndex} onChange={(e) => { 
-                  setOptionIndex(e.target.value); 
-                  setSymbol(""); 
-                  setLtp(null);
-                  setSpotPrice(e.target.value === "BANKNIFTY" ? 60000 : 25000);
-                }}>
-                  <option value="NIFTY">NIFTY</option>
-                  <option value="BANKNIFTY">BANKNIFTY</option>
-                </select>
-                <input 
-                  style={{ flex: 1 }}
-                  type="number"
-                  placeholder="Spot Price"
-                  value={spotPrice}
-                  onChange={(e) => setSpotPrice(Number(e.target.value))}
-                />
+        </div>
+
+        {/* Dynamic Form Grid */}
+        <div className="form-grid">
+          
+          {/* Section 1: Symbol Selection */}
+          {viewMode === "SEARCH" ? (
+            <div className="form-row symbol-field">
+              <label>Search Symbol</label>
+              <input 
+                value={symbol} 
+                onChange={(e) => setSymbol(e.target.value)} 
+                placeholder="e.g. RELIANCE-EQ" 
+                autoComplete="off"
+              />
+              {showSuggestions && suggestions.length > 0 && (
+                <div className="suggest-box">
+                  {suggestions.map((s, idx) => (
+                    <div key={idx} className="suggest-item" onClick={() => { setSymbol(s.trdSymbol); setShowSuggestions(false); }}>
+                      <span>{s.trdSymbol}</span>
+                      <small>{s.name}</small>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="form-row symbol-field" style={{ gap: '12px' }}>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <div className="form-row" style={{ flex: 1 }}>
+                  <label>Index</label>
+                  <select value={optionIndex} onChange={(e) => { 
+                    setOptionIndex(e.target.value); 
+                    setSymbol(""); 
+                    setLtp(null);
+                    setSpotPrice(e.target.value === "BANKNIFTY" ? 60000 : 25000);
+                  }}>
+                    <option value="NIFTY">NIFTY</option>
+                    <option value="BANKNIFTY">BANKNIFTY</option>
+                  </select>
+                </div>
+                <div className="form-row" style={{ flex: 1 }}>
+                  <label>Spot Price</label>
+                  <input type="number" value={spotPrice} onChange={(e) => setSpotPrice(Number(e.target.value))} />
+                </div>
               </div>
               
-              <input 
-                type="text" 
-                placeholder="Filter strikes..." 
-                value={strikeFilter}
-                onChange={(e) => setStrikeFilter(e.target.value)}
-              />
-
-              <select value={symbol} onChange={(e) => setSymbol(e.target.value)}>
-                <option value="">-- {filteredChain.length} Strikes Found --</option>
-                {filteredChain.map((opt, idx) => {
-                  const strikeMatch = opt.trdSymbol.match(/(\d+)(CE|PE)$/);
-                  const displayStrike = strikeMatch ? strikeMatch[1] : "N/A";
-                  const displayType = strikeMatch ? strikeMatch[2] : "";
-                  return (
-                    <option key={idx} value={opt.trdSymbol}>
-                      {opt.trdSymbol.startsWith("NIFTY") ? "NIFTY" : "BANKNIFTY"} | {opt.expiry} | STRIKE: {displayStrike} | {displayType}
-                    </option>
-                  );
-                })}
-              </select>
+              <div className="form-row">
+                <label>Select Strike</label>
+                <select value={symbol} onChange={(e) => setSymbol(e.target.value)}>
+                  <option value="">-- Select from {filteredChain.length} Strikes --</option>
+                  {filteredChain.map((opt, idx) => {
+                    const strikeMatch = opt.trdSymbol.match(/(\d+)(CE|PE)$/);
+                    const displayStrike = strikeMatch ? strikeMatch[1] : "N/A";
+                    const displayType = strikeMatch ? strikeMatch[2] : "";
+                    return (
+                      <option key={idx} value={opt.trdSymbol}>
+                        {opt.expiry} | STRIKE: {displayStrike} | {displayType}
+                      </option>
+                    );
+                  })}
+                </select>
+              </div>
             </div>
+          )}
+
+          {/* Section 2: Order Details */}
+          <div className="form-row">
+            <label>Quantity</label>
+            <input type="number" value={qty} onChange={(e) => setQty(e.target.value)} min="1" />
+          </div>
+
+          <div className="form-row">
+            <label>Price Type</label>
+            <select value={priceType} onChange={(e) => setPriceType(e.target.value)}>
+              <option value="MKT">Market (At LTP)</option>
+              <option value="LMT">Limit Order</option>
+            </select>
+          </div>
+
+          <div className="form-row">
+            <label>
+              Price {ltp && <span style={{color: '#3b82f6', fontWeight: 600}}> (LTP: ₹{ltp})</span>}
+            </label>
+            <input 
+              type="number" 
+              step="0.05"
+              value={price} 
+              onChange={(e) => setPrice(e.target.value)} 
+              disabled={priceType === "MKT"}
+              placeholder={priceType === "MKT" ? "Auto-filled at LTP" : "Enter Limit Price"}
+            />
+          </div>
+
+          <div className="form-row">
+            <label>Side</label>
+            <select value={side} onChange={(e) => setSide(e.target.value)}>
+              <option value="BUY">Buy</option>
+              <option value="SELL">Sell</option>
+            </select>
+          </div>
+
+          <div className="form-row">
+            <label>Product</label>
+            <select value={product} onChange={(e) => setProduct(e.target.value)}>
+              <option value="CNC">CNC (Delivery)</option>
+              <option value="MIS">MIS (Intraday)</option>
+              <option value="NRML">NRML (Overnight)</option>
+            </select>
+          </div>
+        </div>
+
+        {/* Section 3: Action Button & Messages */}
+        <div className="btn-row">
+          <button 
+            className={side === "BUY" ? "buy" : "sell"} 
+            onClick={submit} 
+            disabled={loading || !symbol}
+          >
+            {loading ? "Processing..." : `${side} ${symbol || "ORDER"}`}
+          </button>
+        </div>
+
+        {message.text && (
+          <div className={`message ${message.type}`}>
+            {message.type === "success" ? "✅ " : "⚠️ "}
+            {message.text}
           </div>
         )}
-
-        <div className="form-row">
-          <label>Quantity</label>
-          <input type="number" value={qty} onChange={(e) => setQty(e.target.value)} />
-        </div>
-
-        {/* --- NEW: Price Selection UI --- */}
-        <div className="form-row">
-          <label>Price Type</label>
-          <select value={priceType} onChange={(e) => setPriceType(e.target.value)}>
-            <option value="MKT">Market (At LTP)</option>
-            <option value="LMT">Limit Order</option>
-          </select>
-        </div>
-
-        <div className="form-row">
-          <label>Price {ltp && <span style={{color: '#007bff'}}> (LTP: ₹{ltp})</span>}</label>
-          <input 
-            type="number" 
-            step="0.05"
-            value={price} 
-            onChange={(e) => setPrice(e.target.value)} 
-            disabled={priceType === "MKT"}
-            placeholder={priceType === "MKT" ? "Market Price" : "Enter Price"}
-          />
-        </div>
-
-        <div className="form-row">
-          <label>Side</label>
-          <select value={side} onChange={(e) => setSide(e.target.value)}>
-            <option value="BUY">Buy</option>
-            <option value="SELL">Sell</option>
-          </select>
-        </div>
-
-        <div className="form-row">
-          <label>Product</label>
-          <select value={product} onChange={(e) => setProduct(e.target.value)}>
-            <option value="CNC">CNC (Delivery)</option>
-            <option value="MIS">MIS (Intraday)</option>
-            <option value="NRML">NRML (Overnight)</option>
-          </select>
-        </div>
       </div>
-
-      <div className="btn-row">
-        <button onClick={submit} disabled={loading || !symbol} className={side.toLowerCase()}>
-          {loading ? "Processing..." : `${side} ${symbol || "Order"}`}
-        </button>
-      </div>
-      {message && <p className={`message ${message.includes("success") ? "success" : "error"}`}>{message}</p>}
     </div>
   );
 }
