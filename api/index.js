@@ -195,41 +195,46 @@ app.get("/api/option-chain", async (req, res) => {
 
     const spot = parseFloat(spotPrice);
     const range = 2000;
+    
+    // Set 'today' to the very start of the day to avoid missing today's expiry
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
-    // 1. Filter by Name and Strike Range
-    const rows = cache.rows.filter(r => {
-      // Strict check for the name (NIFTY, BANKNIFTY, etc.)
-      if (r.name !== symbol.toUpperCase()) return false;
+    console.log(`🔎 [Filtering] Looking for ${symbol} near ${spot}. Cache size: ${cache.rows.length}`);
 
-      // Extract strike from the 'token' because it has a predictable decimal format
-      // Example: ...22350.00CE -> 22350
-      const strikeMatch = r.token.match(/(\d+)\.\d{2}(CE|PE)$/);
-      if (!strikeMatch) return false;
+    const processed = cache.rows.map(r => {
+      // 1. Check Name
+      if (r.name !== symbol.toUpperCase()) return null;
+
+      // 2. Updated Regex: Matches digits followed by optional decimal and CE/PE
+      // This handles: 22350.00CE or 22350CE
+      const strikeMatch = r.token.match(/(\d+)(?:\.\d+)?(CE|PE)$/);
+      if (!strikeMatch) return null;
 
       const strike = parseFloat(strikeMatch[1]);
-      return strike >= (spot - range) && strike <= (spot + range);
-    });
+      if (strike < (spot - range) || strike > (spot + range)) return null;
 
-    // 2. Process and Attach Date Objects
-    const processed = rows.map(r => ({
-      ...r,
-      dateObj: parseExpiryFromToken(r.token),
-      strike: r.token.match(/(\d+)\.\d{2}/)[1],
-      type: r.token.endsWith('CE') ? 'CE' : 'PE'
-    }));
-    console.log("processed data",processed);
-    // 3. Sort by Date and get the next 2 unique dates
+      const dateObj = parseExpiryFromToken(r.token);
+      
+      return { ...r, dateObj, strike, type: strikeMatch[2] };
+    }).filter(Boolean);
+
+    console.log(`✅ [Step 1] Matches after Name/Strike filter: ${processed.length}`);
+
+    // 3. Filter out past expiries and sort
     const futureRows = processed
-      .filter(r => r.dateObj >= today)
+      .filter(r => {
+        // Allow anything that expires TODAY or later
+        return r.dateObj.getTime() >= today.getTime();
+      })
       .sort((a, b) => a.dateObj - b.dateObj);
-    
-    console.log("futureRows data",futureRows);
-    
+
+    console.log(`✅ [Step 2] Matches after Expiry filter: ${futureRows.length}`);
+
+    // 4. Get the first two unique expiry dates
     const uniqueDates = [...new Set(futureRows.map(r => r.dateObj.getTime()))].slice(0, 2);
 
-    // 4. Final filter
+    // 5. Final filter
     const finalData = futureRows.filter(r => uniqueDates.includes(r.dateObj.getTime()));
 
     console.log(`🎯 [Option Chain] Found ${finalData.length} contracts for dates:`, 
@@ -238,10 +243,10 @@ app.get("/api/option-chain", async (req, res) => {
 
     res.json(finalData);
   } catch (err) {
+    console.error("❌ [Option Chain Error]:", err.message);
     res.status(500).json({ error: err.message });
   }
 });
-
 app.post("/api/auth/login", async (req, res) => {
   try {
     const data = await loginWithTotp(req.body.totp);
