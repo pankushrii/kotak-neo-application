@@ -315,4 +315,22 @@ app.get("/api/get-ltp", async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+
+app.get("/api/positions", async (req, res) => {
+  try {
+    const session = getSessionFromReq(req);
+    const headers = sessionHeadersOrThrow(session);
+    
+    // Kotak Neo v2 Positions Endpoint
+    const url = `${session.baseUrl.replace(/\/$/, "")}/portfolio/v1/positions`;
+    
+    const response = await axios.get(url, { headers });
+    
+    // Kotak returns positions in response.data.data or success
+    const positions = response.data?.data || response.data?.success || [];
+    res.json(positions);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
 module.exports = app;
