@@ -74,6 +74,7 @@ function parseScripMasterCsv(csvText, isOptionChain) {
   const iInst = header.findIndex(h => /pInstType|instrument_type/i.test(h));
   const iToken = header.indexOf("pScripRefKey"); // This is your Token
   const iExch = header.indexOf("pExchSeg");
+  const iPSymbol = header.indexOf("pSymbol");
 
   return lines.slice(1).map(line => {
     const cols = line.split(",").map(v => v.replace(/^"|"$/g, "").trim());
@@ -96,7 +97,8 @@ function parseScripMasterCsv(csvText, isOptionChain) {
       name: cols[iName] || "",
       expiry,
       exchSeg: cols[iExch] || (isOptionChain ? "nse_fo" : "nse_cm"),
-      token: cols[iToken] || ""
+      token: cols[iToken] || "",
+      pSymbol: cols[iPSymbol] || ""
       
     };
   }).filter(r => r !== null && r.trdSymbol);
@@ -279,6 +281,37 @@ app.post("/api/place-order", async (req, res) => {
   } catch (err) {
     console.log("[Order Error]", err.message);
     console.error("❌ [Order Error]:", err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get("/api/get-ltp", async (req, res) => {
+  try {
+    // Frontend should pass: ?pSymbol=62926&exchange=nse_fo
+    const { pSymbol, exchange = "nse_fo" } = req.query;
+    const session = getSessionFromReq(req);
+    const headers = sessionHeadersOrThrow(session);
+
+    if (!pSymbol) {
+      return res.status(400).json({ error: "pSymbol query parameter is required" });
+    }
+
+    // Dynamic URL construction based on your discovery
+    const cleanBaseUrl = session.baseUrl.replace(/\/$/, "");
+    const fullUrl = `${cleanBaseUrl}/script-details/1.0/quotes/neosymbol/${exchange}|${pSymbol}/ltp`;
+
+    console.log("🌐 [LTP Request] URL:", fullUrl);
+
+    const response = await axios.get(fullUrl, { headers });
+
+    console.log("✅ [LTP Response] Status:", response.status);
+    res.json(response.data);
+
+  } catch (err) {
+    if (err.response) {
+      console.error("❌ [Kotak API Error]:", err.response.status, err.response.data);
+      return res.status(err.response.status).json(err.response.data);
+    }
     res.status(500).json({ error: err.message });
   }
 });
