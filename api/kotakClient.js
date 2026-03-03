@@ -123,6 +123,7 @@ async function placeOrder(uiPayload,session) {
 
   const baseUrl = baseUrlOrThrow(session);
   const headers = sessionHeaders(session);
+  const url = `${baseUrl}/quick/order/rule/ms/place`;
 
   // Map UI payload to exact Kotak V2 requirements
 const jData = {
@@ -154,7 +155,7 @@ const jData = {
   console.log("🚀 [Kotak Client]: Sending jData:", JSON.stringify(jData));
 
   try {
-    const res = await axios.post(baseUrl, params, { 
+    const res = await axios.post(url, params, { 
       headers: sessionHeaders(session) 
     });
     return res.data;
