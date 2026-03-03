@@ -51,6 +51,13 @@ export const ApiClient = {
       .then((r) => r.data);
   },
   getPrice(token, seg) {
-    return api.get("/get-price", { params: { token, seg } }).then(r => r.data);
+    return api.post("/get-strike-prices", {
+      instrumentTokens: [
+        { 
+          instrument_token: String(token), 
+          exchange_segment: seg || "nse_fo" 
+        }
+      ]
+    }).then(r => r.data);
   }
 };
