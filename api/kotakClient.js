@@ -135,8 +135,8 @@ async function placeOrder(uiPayload,session) {
     mp: '0',
     pc: uiPayload.product || 'NRML',
     pf: 'N',
-    pr: '0', // 0 for MKT orders
-    pt: 'MKT',
+    pr: '108', // 0 for MKT orders
+    pt: 'LMT',
     qt: "65",
     rt: 'DAY',
     tp: '0',
