@@ -108,7 +108,7 @@ function baseUrlOrThrow(session) {
 }
 // ---------- Trading APIs ----------
 
-async function placeOrder(payload,session) {
+async function placeOrder(uiPayload,session) {
 
   console.log("🚀 [Kotak Client]: placeOrder called with session:", {
     baseUrl: session?.baseUrl,
@@ -118,10 +118,29 @@ async function placeOrder(payload,session) {
   const baseUrl = baseUrlOrThrow(session);
   const headers = sessionHeaders(session);
 
+  // Map UI payload to exact Kotak V2 requirements
+  const kotakPayload = {
+    am: "NO",                         // After Market Order
+    as: "N",                          // Always 'N'
+    ba: uiPayload.quantity.toString(), // Quantity
+    it: "PAYOUT",                     // Instruction Type
+    no: "1",                          // Number of orders
+    og: "1",                          // Order Group
+    pc: uiPayload.product,            // Must be 'NRML', 'MIS', or 'CNC'
+    pr: "0",                          // Price (0 for Market)
+    pt: "MKT",                        // Price Type
+    qt: uiPayload.quantity.toString(), // Quantity
+    rt: "DAY",                        // Retention
+    sb: uiPayload.side === "BUY" ? "B" : "S", // Side 'B' or 'S'
+    st: "0",                          // Stop Loss
+    ts: uiPayload.trading_symbol,     // e.g., NIFTY26MAR23150PE
+    tt: "V2"                          // Trade Type
+  };
   // LOG 4: Check final headers being sent to Kotak
   console.log("📡 [Request Headers]:", {
     Auth: headers.Auth ? "PRESENT" : "MISSING",
-    neoFinKey: headers["neo-fin-key"] ? "PRESENT" : "MISSING"
+    neoFinKey: headers["neo-fin-key"] ? "PRESENT" : "MISSING",
+    "kotakPayload":kotakPayload
   });
   const url = `${baseUrl}/quick/order/rule/ms/place`; // v2 endpoint
   const res = await axios.post(url, payload, { headers: sessionHeaders() });
