@@ -373,3 +373,38 @@ input:disabled, select:disabled {
 ::-webkit-scrollbar-thumb:hover {
   background: #475569;
 }
+.trade-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+.trade-table th {
+  text-align: left;
+  padding: 12px;
+  color: #64748b;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.trade-table td {
+  padding: 14px 12px;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.profit {
+  color: #10b981; /* Green */
+  font-weight: 600;
+}
+
+.loss {
+  color: #ef4444; /* Red */
+  font-weight: 600;
+}
+
+.seg-tag {
+  background: #f1f5f9;
+  padding: 2px 6px;
+  border-radius: 4px;
+  text-transform: uppercase;
+  font-size: 0.7rem;
+}
