@@ -194,7 +194,9 @@ app.post("/api/auth/login", async (req, res) => {
     res.cookie("sessionSid", data.sid || "none", opt);
     if (data.sessionSid) res.cookie("sessionSid", data.sessionSid, opt);
     res.json({ success: true });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { 
+    console.error("Errro while logging",err);
+    res.status(500).json({ error: err.message }); }
 });
 
 app.get("/api/auth/session", (req, res) => {
