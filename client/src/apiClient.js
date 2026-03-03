@@ -21,7 +21,8 @@ export const ApiClient = {
 
   placeOrder(body) {
     console.log("placeOrder from apiClient",body);
-    return api.post("/placeOrder", body).then((r) => r.data);
+    alert("placeOrder from apiClient");
+    return api.post("/place-order", body).then((r) => r.data);
   },
 
   getPositions() {
