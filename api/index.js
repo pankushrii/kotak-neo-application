@@ -426,7 +426,7 @@ app.get("/api/debug-cache", async (req, res) => {
     const cache = await fetchMasterScripCsvAndCache(false, session, true);
     
     // Slice the first 10 rows
-    const firstTen = cache.rows.slice(0, 10);
+    const firstTen = cache.rows.slice(0, 200);
     
     console.log("🐞 [Debug] Total Rows in Cache:", cache.rows.length);
     console.log("🐞 [Debug] Sample Rows:", firstTen);
