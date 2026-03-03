@@ -109,6 +109,7 @@ function baseUrlOrThrow() {
 // ---------- Trading APIs ----------
 
 async function placeOrder(payload) {
+  console.log ("Calling Place Order from Kotak Client");
   const baseUrl = baseUrlOrThrow();
   const url = `${baseUrl}/quick/order/rule/ms/place`; // v2 endpoint
   const res = await axios.post(url, payload, { headers: sessionHeaders() });
