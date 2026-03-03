@@ -225,6 +225,11 @@ app.post("/api/get-strike-prices", async (req, res) => {
     const { instrumentTokens } = req.body; // e.g., [{instrument_token: "53179", exchange_segment: "nse_fo"}]
     const session = getSessionFromReq(req);
     const headers = sessionHeadersOrThrow(session);
+    const fullUrl = `${session.baseUrl}/quotes/v1/ltp`;
+    console.log("🌐 [LTP Request] URL:", fullUrl);
+    console.log("📦 [LTP Request] Payload:", JSON.stringify(instrumentTokens));
+    console.log("🔑 [LTP Request Headers] Sid:", headers);
+    
 
     // Call Kotak Neo Quotes API
     const response = await axios.post(`${session.baseUrl}/quotes/v1/ltp`, {
