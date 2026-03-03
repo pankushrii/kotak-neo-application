@@ -127,15 +127,8 @@ export function PlaceOrderForm({ onOrderPlaced }) {
     }
   };
 
-  return (
-    <div className="container">
-      {/* Top Dashboard Navigation */}
-      <div className="nav-tabs">
-        <button className="nav-btn active">Trade</button>
-        <button className="nav-btn">Positions</button>
-        <button className="nav-btn">Orders</button>
-      </div>
-
+return (
+    <div className="container" style={{ padding: '0px' }}>
       <div className="card">
         {/* Card Header & View Toggle */}
         <div className="card-head">
