@@ -225,23 +225,31 @@ app.post("/api/get-strike-prices", async (req, res) => {
     const session = getSessionFromReq(req);
     const headers = sessionHeadersOrThrow(session);
 
-    // FIX: Remove trailing slash and use the updated endpoint
+    // 1. Official v2 Path from settings.py
     const cleanBaseUrl = session.baseUrl.replace(/\/$/, "");
-    const fullUrl = `${cleanBaseUrl}/script-details/1.0/quotes`;
+    const fullUrl = `${cleanBaseUrl}/quotes/v1/quotes`;
 
     console.log("🌐 [LTP Request] URL:", fullUrl);
+    
+    // 2. Format payload exactly as the v2 SDK does
+    // It requires 'quote_type' to be sent to get LTP
+    const payload = {
+      instrumentTokens: instrumentTokens.map(t => ({
+        instrumentToken: String(t.instrument_token || t.instrumentToken),
+        exchangeSegment: t.exchange_segment || t.exchangeSegment
+      })),
+      quoteType: "ltp" // This tells the API to return the Last Traded Price
+    };
 
-    const response = await axios.post(fullUrl, {
-      instrument_tokens: instrumentTokens,
-      quote_type: "ltp" // Explicitly request only LTP to save bandwidth
-    }, { headers });
+    const response = await axios.post(fullUrl, payload, { headers });
 
-    // Kotak response is usually { "message": [...data...] } or { "data": [...] }
+    // 3. The response structure for v2 is usually { "data": [ ... ] }
+    // but Kotak sometimes nests it under "message"
     res.json(response.data);
 
   } catch (err) {
     if (err.response) {
-      console.error("❌ [404/API Error]:", err.response.status, err.response.data);
+      console.error("❌ [Kotak API Error]:", err.response.status, JSON.stringify(err.response.data));
       return res.status(err.response.status).json(err.response.data);
     }
     res.status(500).json({ error: err.message });
