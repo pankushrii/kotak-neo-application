@@ -109,8 +109,20 @@ function baseUrlOrThrow(session) {
 // ---------- Trading APIs ----------
 
 async function placeOrder(payload,session) {
-  console.log ("Calling Place Order from Kotak Client",payload +"Session",session);
+
+  console.log("🚀 [Kotak Client]: placeOrder called with session:", {
+    baseUrl: session?.baseUrl,
+    tokenLength: session?.sessionToken?.length || 0
+  });
+
   const baseUrl = baseUrlOrThrow(session);
+  const headers = sessionHeaders(session);
+
+  // LOG 4: Check final headers being sent to Kotak
+  console.log("📡 [Request Headers]:", {
+    Auth: headers.Auth ? "PRESENT" : "MISSING",
+    neoFinKey: headers["neo-fin-key"] ? "PRESENT" : "MISSING"
+  });
   const url = `${baseUrl}/quick/order/rule/ms/place`; // v2 endpoint
   const res = await axios.post(url, payload, { headers: sessionHeaders() });
   return res.data;
