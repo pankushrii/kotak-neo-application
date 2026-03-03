@@ -131,8 +131,6 @@ async function fetchMasterScripCsvAndCache(force, session, isOptionChain = false
 
   // Call the newly defined parser
   const rows = parseScripMasterCsv(csvText, isOptionChain);
-  console.log("rowsss",rows);
-
   SCRIP_CACHE = { 
     updatedAt: now, 
     rows, 
