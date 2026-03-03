@@ -169,12 +169,13 @@ function parseExpiry(trdSymbol, indexName) {
   return new Date(year, monthIdx, 28); 
 }
 
+
 /**
- * Updated Parser to extract date from the 'token' field: DDMMMYY (e.g., 17MAR26)
+ * Helper to parse the 7-char date (e.g., 17MAR26 or 10MAR26) 
+ * located in the middle of your token string.
  */
 function parseExpiryFromToken(tokenStr) {
-  // Regex looks for 2 digits, 3 letters, 2 digits (e.g., 17MAR26)
-  const match = tokenStr.toUpperCase().match(/(\d{2})([A-Z]{3})(\d{2})/);
+  const match = tokenStr.match(/(\d{2})([A-Z]{3})(\d{2})/);
   if (!match) return new Date(2099, 0, 1);
 
   const day = parseInt(match[1]);
@@ -193,68 +194,62 @@ app.get("/api/option-chain", async (req, res) => {
     const session = getSessionFromReq(req);
     const cache = await fetchMasterScripCsvAndCache(false, session, true);
 
-    // --- DIAGNOSTIC LOG START ---
-    if (cache.rows.length > 0) {
-      console.log("📝 [Diagnostic] Total Rows:", cache.rows.length);
-      console.log("📝 [Diagnostic] Keys found in Row 0:", Object.keys(cache.rows[0]));
-      
-      // Look for the first row that even mentions NIFTY to see what its 'name' is
-      const sampleNifty = cache.rows.find(r => 
-        JSON.stringify(r).toUpperCase().includes("NIFTY")
-      );
-      console.log("📝 [Diagnostic] Sample NIFTY Row Data:", JSON.stringify(sampleNifty));
-    }
-    // --- DIAGNOSTIC LOG END ---
-
     const spot = parseFloat(spotPrice);
     const range = 2000;
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-const processed = cache.rows.map((r) => {
-  const rowName = (r.name || "").toString().toUpperCase();
-  const targetName = symbol.toUpperCase(); // e.g., "NIFTY"
 
-  // 1. IMPROVED NAME CHECK:
-  // This ensures "NIFTY" matches "NIFTY", but also handles potential 
-  // hidden spaces or variations like "NIFTY 50"
-  const isMatch = rowName === targetName || 
-                  (targetName === "NIFTY" && rowName === "NIFTY 50") ||
-                  (targetName === "BANKNIFTY" && rowName === "NIFTY BANK");
+    const processed = cache.rows.map((r) => {
+      // 1. Strict Name Match (NIFTY only, no NIFTYNXT50)
+      if (r.name !== symbol.toUpperCase()) return null;
 
-  if (!isMatch) return null;
+      const tokenStr = (r.token || "").toUpperCase();
+      
+      /**
+       * 2. The Extraction Regex
+       * (\\d{2}[A-Z]{3}\\d{2}) -> Captures the date (17MAR26)
+       * (\\d+)                 -> Captures the strike (23050)
+       * (\\.00)?               -> Handles the decimal if present
+       * (CE|PE)$               -> Captures the side at the very end
+       */
+      const match = tokenStr.match(/(\d{2}[A-Z]{3}\d{2})(\d+)(?:\.\d+)?(CE|PE)$/);
+      
+      if (!match) return null;
 
-  // 2. The Token/Strike logic
-  const scripStr = (r.token || r.trdSymbol || "").toString().toUpperCase();
-  
-  // Regex needs to handle the Index name at the start
-  const strikeMatch = scripStr.match(/(\d+)(?:\.\d+)?(CE|PE)$/);
-  if (!strikeMatch) return null;
+      const strikeValue = parseFloat(match[2]);
+      
+      // 3. Strike Range Check
+      if (strikeValue < (spot - range) || strikeValue > (spot + range)) return null;
 
-  const strikeValue = parseFloat(strikeMatch[1]);
-  if (strikeValue < (spot - range) || strikeValue > (spot + range)) return null;
+      return {
+        ...r,
+        strike: strikeValue,
+        type: match[3],
+        dateObj: parseExpiryFromToken(match[1]) // Parse the extracted date "17MAR26"
+      };
+    }).filter(Boolean);
 
-  return {
-    ...r,
-    strike: strikeValue,
-    type: strikeMatch[2],
-    dateObj: parseExpiryFromToken(scripStr)
-  };
-}).filter(Boolean);
+    console.log(`✅ [Step 1] Rows passing Name/Strike/Regex: ${processed.length}`);
 
-    console.log(`✅ [Step 1] Matches after Name/Strike filter: ${processed.length}`);
-
+    // 4. Expiry Filter and "Next 2" Logic
     const futureRows = processed
-      .filter(r => r.dateObj >= today)
+      .filter(r => r.dateObj.getTime() >= today.getTime())
       .sort((a, b) => a.dateObj - b.dateObj);
 
-    const uniqueDates = [...new Set(futureRows.map(r => r.dateObj.getTime()))].slice(0, 2);
-    const finalData = futureRows.filter(r => uniqueDates.includes(r.dateObj.getTime()));
+    const uniqueTimestamps = [...new Set(futureRows.map(r => r.dateObj.getTime()))].slice(0, 2);
+    const finalData = futureRows.filter(r => uniqueTimestamps.includes(r.dateObj.getTime()));
+
+    console.log(`🎯 [Final] Found ${finalData.length} contracts for dates:`, 
+      uniqueTimestamps.map(ts => new Date(ts).toDateString())
+    );
 
     res.json(finalData);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
+
+
 app.post("/api/auth/login", async (req, res) => {
   try {
     const data = await loginWithTotp(req.body.totp);
