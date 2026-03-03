@@ -72,11 +72,14 @@ function parseScripMasterCsv(csvText, isOptionChain) {
   const iTrd = header.findIndex(h => /trdSym|pTrdSymbol|trading_symbol/i.test(h));
   const iName = header.findIndex(h => /pSymbolName|name|pDesc/i.test(h));
   const iInst = header.findIndex(h => /pInstType|instrument_type/i.test(h));
+  const iToken = header.indexOf("pScripRefKey"); // This is your Token
+  const iExch = header.indexOf("pExchSeg");
 
   return lines.slice(1).map(line => {
     const cols = line.split(",").map(v => v.replace(/^"|"$/g, "").trim());
     const trdSymbol = cols[iTrd] || "";
     const instType = iInst >= 0 ? cols[iInst] : "";
+    
 
     // If fetching Options, only keep Index Options (OPTIDX)
     if (isOptionChain && instType !== "OPTIDX") return null;
@@ -92,7 +95,9 @@ function parseScripMasterCsv(csvText, isOptionChain) {
       trdSymbol,
       name: cols[iName] || "",
       expiry,
-      exchSeg: isOptionChain ? "nse_fo" : "nse_cm"
+      exchSeg: cols[iExch] || (isOptionChain ? "nse_fo" : "nse_cm"),
+      token: cols[iToken] || ""
+      
     };
   }).filter(r => r !== null && r.trdSymbol);
 }
