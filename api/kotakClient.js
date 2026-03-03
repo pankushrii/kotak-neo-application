@@ -98,14 +98,14 @@ function sessionHeaders() {
   return headers;
 }
 
-function baseUrlOrThrow() {
-  const { baseUrl } = getSession();
-  if (!baseUrl) {
+
+// Updated baseUrl to accept a session object
+function baseUrlOrThrow(session) {
+  if (!session || !session.baseUrl) {
     throw new Error("No baseUrl. Login first.");
   }
-  return baseUrl;
+  return session.baseUrl;
 }
-
 // ---------- Trading APIs ----------
 
 async function placeOrder(payload) {
