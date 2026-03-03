@@ -125,32 +125,43 @@ async function placeOrder(uiPayload,session) {
   const headers = sessionHeaders(session);
 
   // Map UI payload to exact Kotak V2 requirements
-  const kotakPayload = {
-    am: "NO",                         // After Market Order
-    as: "N",                          // Always 'N'
-    ba: uiPayload.quantity.toString(), // Quantity
-    it: "PAYOUT",                     // Instruction Type
-    no: "1",                          // Number of orders
-    og: "1",                          // Order Group
-    pc: uiPayload.product,            // Must be 'NRML', 'MIS', or 'CNC'
-    pr: "0",                          // Price (0 for Market)
-    pt: "MKT",                        // Price Type
-    qt: uiPayload.quantity.toString(), // Quantity
-    rt: "DAY",                        // Retention
-    sb: uiPayload.side === "BUY" ? "B" : "S", // Side 'B' or 'S'
-    st: "0",                          // Stop Loss
-    ts: uiPayload.trading_symbol,     // e.g., NIFTY26MAR23150PE
-    tt: "V2"                          // Trade Type
+const jData = {
+    am: "NO",
+    dq: "0",
+    es: uiPayload.exchange_segment || "nse_fo", // nse_fo for options
+    mp: "0",
+    pc: uiPayload.product || "NRML",
+    pf: "N",
+    pr: "0",
+    pt: "MKT",
+    qt: uiPayload.quantity.toString(),
+    rt: "DAY",
+    tp: "0",
+    ts: uiPayload.trading_symbol,
+    tt: uiPayload.side === "BUY" ? "B" : "S", // 'B' or 'S'
+    sot: "Absolute",
+    slt: "Absolute",
+    slv: "0",
+    sov: "0",
+    tlt: "N",
+    tsv: "0"
   };
   // LOG 4: Check final headers being sent to Kotak
-  console.log("📡 [Request Headers]:", {
-    Auth: headers.Auth ? "PRESENT" : "MISSING",
-    neoFinKey: headers["neo-fin-key"] ? "PRESENT" : "MISSING",
-    "kotakPayload":kotakPayload
-  });
-  const url = `${baseUrl}/quick/order/rule/ms/place`; // v2 endpoint
-  const res = await axios.post(url, kotakPayload, { headers: sessionHeaders(session) });
-  return res.data;
+ // IMPORTANT: Wrap in jData and use URLSearchParams for x-www-form-urlencoded
+  const params = new URLSearchParams();
+  params.append("jData", JSON.stringify(jData));
+
+  console.log("🚀 [Kotak Client]: Sending jData:", JSON.stringify(jData));
+
+  try {
+    const res = await axios.post(url, params, { 
+      headers: sessionHeaders(session) 
+    });
+    return res.data;
+  } catch (err) {
+    console.error("❌ [Kotak Rejection]:", JSON.stringify(err.response?.data || err.message));
+    throw err;
+  }
 }
 
 async function getOrders(session) {
