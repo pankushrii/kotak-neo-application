@@ -169,11 +169,18 @@ export function PlaceOrderForm({ onOrderPlaced }) {
 
               <select value={symbol} onChange={(e) => setSymbol(e.target.value)}>
                 <option value="">-- {filteredChain.length} Strikes Found --</option>
-                {filteredChain.map((opt, idx) => (
-                  <option key={idx} value={opt.trdSymbol}>
-                    {opt.trdSymbol.startsWith("NIFTY") ? "NIFTY" : "BANKNIFTY"} | {opt.expiry} | STRIKE: {opt.name.split(' ').slice(-2, -1)} | {opt.name.slice(-2)}
-                  </option>
-                ))}
+             {filteredChain.map((opt, idx) => {
+  // Use regex to extract digits (Strike) and the last two letters (CE/PE)
+  const strikeMatch = opt.trdSymbol.match(/(\d+)(CE|PE)$/);
+  const displayStrike = strikeMatch ? strikeMatch[1] : "N/A";
+  const displayType = strikeMatch ? strikeMatch[2] : "";
+
+  return (
+    <option key={idx} value={opt.trdSymbol}>
+      {opt.trdSymbol.startsWith("NIFTY") ? "NIFTY" : "BANKNIFTY"} | {opt.expiry} | STRIKE: {displayStrike} | {displayType}
+    </option>
+  );
+})}
               </select>
 
               {/* Upfront Price Visibility */}
