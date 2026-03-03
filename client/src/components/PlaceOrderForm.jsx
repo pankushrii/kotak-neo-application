@@ -69,6 +69,7 @@ export function PlaceOrderForm({ onOrderPlaced }) {
 
   // 3. Live LTP Fetching (Fetches ONCE on selection change)
   useEffect(() => {
+    alert("Symbol Sletect",symbol);
     if (!symbol) {
       setLtp(null);
       setPrice("");
