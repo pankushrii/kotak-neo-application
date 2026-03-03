@@ -2,12 +2,17 @@ import React, { useEffect, useRef, useState } from "react";
 import { ApiClient } from "../apiClient";
 
 export function PlaceOrderForm({ onOrderPlaced }) {
-  const [symbol, setSymbol] = useState("RELIANCE-EQ");
+  const [symbol, setSymbol] = useState("");
   const [qty, setQty] = useState(1);
   const [side, setSide] = useState("BUY");
   const [product, setProduct] = useState("CNC");
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
+
+  // --- NEW: Price & Price Type States ---
+  const [priceType, setPriceType] = useState("MKT");
+  const [price, setPrice] = useState("");
+  const [ltp, setLtp] = useState(null);
 
   // Option Chain States
   const [viewMode, setViewMode] = useState("SEARCH");
@@ -15,10 +20,7 @@ export function PlaceOrderForm({ onOrderPlaced }) {
   const [chainData, setChainData] = useState([]);
   const [chainLoading, setChainLoading] = useState(false);
   const [strikeFilter, setStrikeFilter] = useState("");
-  
-  // --- UPDATED SPOT PRICES FOR 2026 ---
   const [spotPrice, setSpotPrice] = useState(25000); 
-  const [ltp, setLtp] = useState(null); // To show live price of selected strike
 
   const [suggestions, setSuggestions] = useState([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
@@ -26,6 +28,7 @@ export function PlaceOrderForm({ onOrderPlaced }) {
 
   const debounceRef = useRef(null);
 
+  // Symbol Search Logic
   useEffect(() => {
     if (viewMode !== "SEARCH") return;
     const q = symbol.trim();
@@ -50,16 +53,14 @@ export function PlaceOrderForm({ onOrderPlaced }) {
     return () => debounceRef.current && clearTimeout(debounceRef.current);
   }, [symbol, viewMode]);
 
+  // Option Chain Fetching
   useEffect(() => {
     if (viewMode !== "OPTION_CHAIN") return;
     const fetchChain = async () => {
       setChainLoading(true);
-      setMessage("Loading Scrip Master...");
       try {
-        // Pass both index and spotPrice to backend for ±2000 range filtering
         const data = await ApiClient.getOptionChain(optionIndex, spotPrice);
         setChainData(data || []);
-        setMessage("");
       } catch (err) {
         setMessage("Failed to load option chain.");
       } finally {
@@ -69,23 +70,35 @@ export function PlaceOrderForm({ onOrderPlaced }) {
     fetchChain();
   }, [optionIndex, viewMode, spotPrice]);
 
-  // --- FETCH LIVE PRICE OF SELECTED STRIKE ---
+  // Live LTP Fetching (Polls every 5 seconds)
   useEffect(() => {
-    if (viewMode !== "OPTION_CHAIN" || !symbol) return;
+    if (!symbol) return;
     
-    const selectedOpt = chainData.find(o => o.trdSymbol === symbol);
-    if (selectedOpt && selectedOpt.token) {
-      ApiClient.getPrice(selectedOpt.token, selectedOpt.exchSeg)
-        .then(data => {
-          const price = data?.data?.[0]?.ltp;
-          setLtp(price);
-        })
-        .catch(() => setLtp(null));
-    }
-  }, [symbol, chainData, viewMode]);
+    const fetchPrice = async () => {
+      try {
+        // Find token for selected strike if in Option Chain mode
+        const selectedOpt = viewMode === "OPTION_CHAIN" 
+          ? chainData.find(o => o.trdSymbol === symbol) 
+          : suggestions.find(o => o.trdSymbol === symbol);
+
+        if (selectedOpt && selectedOpt.token) {
+          const data = await ApiClient.getPrice(selectedOpt.token, selectedOpt.exchSeg || selectedOpt.exch);
+          const latestPrice = data?.data?.[0]?.ltp;
+          setLtp(latestPrice);
+          // Auto-fill price if Market is selected to ensure reference price exists
+          if (priceType === "MKT") setPrice(latestPrice);
+        }
+      } catch (err) {
+        console.error("LTP Fetch error", err);
+      }
+    };
+
+    fetchPrice();
+    const interval = setInterval(fetchPrice, 5000);
+    return () => clearInterval(interval);
+  }, [symbol, chainData, viewMode, priceType]);
 
   const filteredChain = chainData.filter(opt => 
-    opt.name.toLowerCase().includes(strikeFilter.toLowerCase()) ||
     opt.trdSymbol.toLowerCase().includes(strikeFilter.toLowerCase())
   );
 
@@ -93,18 +106,18 @@ export function PlaceOrderForm({ onOrderPlaced }) {
     setLoading(true);
     setMessage("");
     try {
-      console.log("Placeing order on submit");
-      alert("placeOrder from OrderForm");
       const res = await ApiClient.placeOrder({
         trading_symbol: symbol.trim(),
         quantity: Number(qty),
         side,
-        product
+        product,
+        // Pass price data to backend
+        price: priceType === "MKT" ? ltp : Number(price),
+        priceType: "LMT" // Forced to LMT in backend logic to prevent 1041 rejection
       });
       setMessage("Order placed successfully.");
       if (onOrderPlaced) onOrderPlaced(res);
     } catch (e) {
-      console.log("Placeing order on submit Error",e);
       setMessage(e?.response?.data?.error || e.message || "Order failed.");
     } finally {
       setLoading(false);
@@ -116,8 +129,8 @@ export function PlaceOrderForm({ onOrderPlaced }) {
       <div className="card-head">
         <h2>Place Order</h2>
         <div className="mode-toggle">
-          <button className={viewMode === "SEARCH" ? "active" : ""} onClick={() => setViewMode("SEARCH")}>Search Stocks</button>
-          <button className={viewMode === "OPTION_CHAIN" ? "active" : ""} onClick={() => { setViewMode("OPTION_CHAIN"); setProduct("NRML"); }}>Option Chain</button>
+          <button className={viewMode === "SEARCH" ? "active" : ""} onClick={() => { setViewMode("SEARCH"); setSymbol(""); }}>Search Stocks</button>
+          <button className={viewMode === "OPTION_CHAIN" ? "active" : ""} onClick={() => { setViewMode("OPTION_CHAIN"); setProduct("NRML"); setSymbol(""); }}>Option Chain</button>
         </div>
       </div>
 
@@ -145,16 +158,13 @@ export function PlaceOrderForm({ onOrderPlaced }) {
                   setOptionIndex(e.target.value); 
                   setSymbol(""); 
                   setLtp(null);
-                  if(e.target.value === "BANKNIFTY") setSpotPrice(60000);
-                  else setSpotPrice(25000);
+                  setSpotPrice(e.target.value === "BANKNIFTY" ? 60000 : 25000);
                 }}>
                   <option value="NIFTY">NIFTY</option>
                   <option value="BANKNIFTY">BANKNIFTY</option>
                 </select>
-
-                {/* Manual Spot Price Input to center the ±2000 range */}
                 <input 
-                  style={{ flex: 1, padding: '8px', fontSize: '12px' }}
+                  style={{ flex: 1 }}
                   type="number"
                   placeholder="Spot Price"
                   value={spotPrice}
@@ -164,34 +174,24 @@ export function PlaceOrderForm({ onOrderPlaced }) {
               
               <input 
                 type="text" 
-                placeholder="Filter strikes (e.g. 21500)" 
+                placeholder="Filter strikes..." 
                 value={strikeFilter}
                 onChange={(e) => setStrikeFilter(e.target.value)}
-                style={{ padding: '8px', fontSize: '12px' }}
               />
 
               <select value={symbol} onChange={(e) => setSymbol(e.target.value)}>
                 <option value="">-- {filteredChain.length} Strikes Found --</option>
-             {filteredChain.map((opt, idx) => {
-  // Use regex to extract digits (Strike) and the last two letters (CE/PE)
-  const strikeMatch = opt.trdSymbol.match(/(\d+)(CE|PE)$/);
-  const displayStrike = strikeMatch ? strikeMatch[1] : "N/A";
-  const displayType = strikeMatch ? strikeMatch[2] : "";
-
-  return (
-    <option key={idx} value={opt.trdSymbol}>
-      {opt.trdSymbol.startsWith("NIFTY") ? "NIFTY" : "BANKNIFTY"} | {opt.expiry} | STRIKE: {displayStrike} | {displayType}
-    </option>
-  );
-})}
+                {filteredChain.map((opt, idx) => {
+                  const strikeMatch = opt.trdSymbol.match(/(\d+)(CE|PE)$/);
+                  const displayStrike = strikeMatch ? strikeMatch[1] : "N/A";
+                  const displayType = strikeMatch ? strikeMatch[2] : "";
+                  return (
+                    <option key={idx} value={opt.trdSymbol}>
+                      {opt.trdSymbol.startsWith("NIFTY") ? "NIFTY" : "BANKNIFTY"} | {opt.expiry} | STRIKE: {displayStrike} | {displayType}
+                    </option>
+                  );
+                })}
               </select>
-
-              {/* Upfront Price Visibility */}
-              {ltp !== null && (
-                <div style={{ padding: '10px', background: '#f0f7ff', borderRadius: '4px', border: '1px solid #cce3ff', marginTop: '5px' }}>
-                   <strong style={{ color: '#004085' }}>Live LTP: ₹{ltp}</strong>
-                </div>
-              )}
             </div>
           </div>
         )}
@@ -200,14 +200,40 @@ export function PlaceOrderForm({ onOrderPlaced }) {
           <label>Quantity</label>
           <input type="number" value={qty} onChange={(e) => setQty(e.target.value)} />
         </div>
+
+        {/* --- NEW: Price Selection UI --- */}
+        <div className="form-row">
+          <label>Price Type</label>
+          <select value={priceType} onChange={(e) => setPriceType(e.target.value)}>
+            <option value="MKT">Market (At LTP)</option>
+            <option value="LMT">Limit Order</option>
+          </select>
+        </div>
+
+        <div className="form-row">
+          <label>Price {ltp && <span style={{color: '#007bff'}}> (LTP: ₹{ltp})</span>}</label>
+          <input 
+            type="number" 
+            step="0.05"
+            value={price} 
+            onChange={(e) => setPrice(e.target.value)} 
+            disabled={priceType === "MKT"}
+            placeholder={priceType === "MKT" ? "Market Price" : "Enter Price"}
+          />
+        </div>
+
         <div className="form-row">
           <label>Side</label>
-          <select value={side} onChange={(e) => setSide(e.target.value)}><option value="BUY">Buy</option><option value="SELL">Sell</option></select>
+          <select value={side} onChange={(e) => setSide(e.target.value)}>
+            <option value="BUY">Buy</option>
+            <option value="SELL">Sell</option>
+          </select>
         </div>
+
         <div className="form-row">
           <label>Product</label>
           <select value={product} onChange={(e) => setProduct(e.target.value)}>
-            <option value="CNC">CNC</option>
+            <option value="CNC">CNC (Delivery)</option>
             <option value="MIS">MIS (Intraday)</option>
             <option value="NRML">NRML (Overnight)</option>
           </select>
@@ -215,11 +241,11 @@ export function PlaceOrderForm({ onOrderPlaced }) {
       </div>
 
       <div className="btn-row">
-        <button onClick={submit} disabled={loading || !symbol}>
+        <button onClick={submit} disabled={loading || !symbol} className={side.toLowerCase()}>
           {loading ? "Processing..." : `${side} ${symbol || "Order"}`}
         </button>
       </div>
-      {message && <p className="message">{message}</p>}
+      {message && <p className={`message ${message.includes("success") ? "success" : "error"}`}>{message}</p>}
     </div>
   );
 }
