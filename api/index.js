@@ -106,6 +106,7 @@ function parseScripMasterCsv(csvText, isOptionChain) {
 
 async function fetchMasterScripCsvAndCache(force, session, isOptionChain = false) {
   const now = Date.now();
+  force=true;
   const targetType = isOptionChain ? "FO" : "CM";
   
   if (!force && SCRIP_CACHE.rows.length && SCRIP_CACHE.type === targetType && (now - SCRIP_CACHE.updatedAt < CACHE_DURATION_MS)) {
