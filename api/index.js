@@ -140,8 +140,76 @@ async function fetchMasterScripCsvAndCache(force, session, isOptionChain = false
   return SCRIP_CACHE;
 }
 
-// --- Endpoints ---
+
+/**
+ * Helper to convert NSE symbol date strings to Date objects
+ * Formats handled: 
+ * - Monthly: 26MAR (Year 26, Month MAR)
+ * - Weekly: 26312 (Year 26, Month 3, Day 12)
+ */
+function parseExpiry(trdSymbol, indexName) {
+  const datePart = trdSymbol.replace(indexName.toUpperCase(), "").match(/^[A-Z0-9]{5}/)?.[0];
+  if (!datePart) return new Date(2099, 0, 1);
+
+  const year = 2000 + parseInt(datePart.substring(0, 2));
+  
+  // Weekly Format: 26312 (Year 26, Month 3, Day 12)
+  if (/^\d{5}$/.test(datePart)) {
+    const month = parseInt(datePart.substring(2, 3), 16) - 1; // Handle Oct(O), Nov(N), Dec(D) if hex
+    const day = parseInt(datePart.substring(3, 5));
+    return new Date(year, month, day);
+  }
+
+  // Monthly Format: 26MAR (Year 26, Month MAR)
+  const months = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
+  const monthStr = datePart.substring(2, 5);
+  const monthIdx = months.indexOf(monthStr);
+  
+  // Monthly expiries are usually the last Thursday
+  return new Date(year, monthIdx, 28); 
+}
+
 app.get("/api/option-chain", async (req, res) => {
+  try {
+    const { symbol, spotPrice } = req.query;
+    const session = getSessionFromReq(req);
+    const cache = await fetchMasterScripCsvAndCache(false, session, true);
+
+    const spot = parseFloat(spotPrice);
+    const range = 2000;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    // 1. Filter by Index and Strike Range
+    let rows = cache.rows.filter(r => {
+      const ts = r.trdSymbol.toUpperCase();
+      if (!ts.startsWith(symbol.toUpperCase())) return false;
+      
+      const strikeMatch = ts.match(/(\d+)(CE|PE)$/);
+      if (!strikeMatch) return false;
+      const strike = parseFloat(strikeMatch[1]);
+      return strike >= (spot - range) && strike <= (spot + range);
+    });
+
+    // 2. Attach real Date objects for sorting
+    rows = rows.map(r => ({ ...r, dateObj: parseExpiry(r.trdSymbol, symbol) }));
+
+    // 3. Filter out expired ones and sort
+    rows = rows.filter(r => r.dateObj >= today).sort((a, b) => a.dateObj - b.dateObj);
+
+    // 4. Get the first two unique expiry dates
+    const uniqueExpiries = [...new Set(rows.map(r => r.dateObj.getTime()))].slice(0, 2);
+
+    // 5. Only return rows matching those two dates
+    const finalData = rows.filter(r => uniqueExpiries.includes(r.dateObj.getTime()));
+
+    res.json(finalData);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+// --- Endpoints ---
+app.get("/api/option-chain-1", async (req, res) => {
   try {
     const { symbol, spotPrice } = req.query; // spotPrice passed from frontend
     const session = getSessionFromReq(req);
