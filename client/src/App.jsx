@@ -83,15 +83,15 @@ function App() {
           )}
 
           {hasSession && (
-            <button className="ghost" onClick={refreshData} disabled={loadingData}>
-              {loadingData ? "Refreshing..." : "Refresh"}
+            <button className="nav-btn" onClick={refreshData} disabled={loadingData} style={{ padding: '8px 16px', borderRadius: '8px', minWidth: 'auto', background: 'var(--brand-blue)', color: 'white' }}>
+              {loadingData ? "Refreshing..." : "REFRESH"}
             </button>
           )}
         </div>
       </header>
 
       <main className="container">
-        {banner && <div className="banner">{banner}</div>}
+        {banner && <div className="message success" style={{ marginBottom: '16px' }}>{banner}</div>}
 
         {/* LOGIN: show only when not logged in */}
         {!hasSession && (
@@ -108,21 +108,21 @@ function App() {
         {/* DASHBOARD */}
         {hasSession && (
           <>
-            <div className="tabs">
+            <div className="nav-tabs">
               <button
-                className={activeTab === "trade" ? "tab active" : "tab"}
+                className={`nav-btn ${activeTab === "trade" ? "active" : ""}`}
                 onClick={() => setActiveTab("trade")}
               >
                 Trade
               </button>
               <button
-                className={activeTab === "positions" ? "tab active" : "tab"}
+                className={`nav-btn ${activeTab === "positions" ? "active" : ""}`}
                 onClick={() => setActiveTab("positions")}
               >
                 Positions
               </button>
               <button
-                className={activeTab === "orders" ? "tab active" : "tab"}
+                className={`nav-btn ${activeTab === "orders" ? "active" : ""}`}
                 onClick={() => setActiveTab("orders")}
               >
                 Orders
