@@ -20,7 +20,7 @@ export const ApiClient = {
   },
 
   placeOrder(body) {
-    return api.post("/orders", body).then((r) => r.data);
+    return api.post("/placeOrder", body).then((r) => r.data);
   },
 
   getPositions() {
