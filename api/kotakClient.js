@@ -116,15 +116,15 @@ async function placeOrder(payload,session) {
   return res.data;
 }
 
-async function getOrders() {
-  const baseUrl = baseUrlOrThrow();
+async function getOrders(session) {
+  const baseUrl = baseUrlOrThrow(session);
   const url = `${baseUrl}/quick/user/orders`; // v2 endpoint
   const res = await axios.get(url, { headers: sessionHeaders() });
   return res.data;
 }
 
-async function getPositions() {
-  const baseUrl = baseUrlOrThrow();
+async function getPositions(session) {
+  const baseUrl = baseUrlOrThrow(session);
   const url = `${baseUrl}/quick/user/positions`; // v2 endpoint
   const res = await axios.get(url, { headers: sessionHeaders() });
   return res.data;
