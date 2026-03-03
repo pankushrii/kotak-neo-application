@@ -98,7 +98,7 @@ function sessionHeaders(session) {
 
   return {
     "Content-Type": "application/x-www-form-urlencoded",
-    Accept: "application/json",
+    "Accept": "application/json",
     "neo-fin-key": apiConfig.neoFinKey,
     Auth: token,
     ...(sid && sid !== "none" && { sid })
@@ -159,6 +159,7 @@ const jData = {
     });
     return res.data;
   } catch (err) {
+        console.log("❌ [Kotak Rejection]:", JSON.stringify(err.response?.data || err.message));
     console.error("❌ [Kotak Rejection]:", JSON.stringify(err.response?.data || err.message));
     throw err;
   }
