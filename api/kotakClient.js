@@ -67,7 +67,7 @@ async function mpinValidate({ preAuthToken, preAuthSid }) {
   if (!token || !baseUrl) {
     throw new Error("MPIN validate: token/baseUrl missing in response");
   }
-
+  console.log("Setting Session",token+"sid",sid+,"baseURL",baseUrl);
   setSession({ token, sid, baseUrl });
 
   return { token, sid, baseUrl };
@@ -75,6 +75,7 @@ async function mpinValidate({ preAuthToken, preAuthSid }) {
 
 // Public function for login from Express route
 async function loginWithTotp(totp) {
+  console.log("Inside loginWithTotp, kotak Client",totp)
   const { preAuthToken, preAuthSid } = await totpLogin(totp);
   return mpinValidate({ preAuthToken, preAuthSid });
 }
