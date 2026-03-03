@@ -67,7 +67,7 @@ async function mpinValidate({ preAuthToken, preAuthSid }) {
   if (!token || !baseUrl) {
     throw new Error("MPIN validate: token/baseUrl missing in response");
   }
-  console.log("Setting Session",token+"sid",sid+,"baseURL",baseUrl);
+  console.log("Setting Session", token + " sid", sid, "baseURL", baseUrl);
   setSession({ token, sid, baseUrl });
 
   return { token, sid, baseUrl };
