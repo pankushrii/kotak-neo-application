@@ -67,7 +67,7 @@ export function PlaceOrderForm({ onOrderPlaced }) {
     fetchChain();
   }, [optionIndex, viewMode, spotPrice]);
 
-  // 3. Live LTP Fetching (Polls every 5 seconds)
+  // 3. Live LTP Fetching (Immediate + Polls every 5s)
   useEffect(() => {
     if (!symbol) {
       setLtp(null);
@@ -81,23 +81,33 @@ export function PlaceOrderForm({ onOrderPlaced }) {
           : suggestions.find(o => o.trdSymbol === symbol);
 
         if (selectedOpt && selectedOpt.token) {
-          const data = await ApiClient.getPrice(selectedOpt.token, selectedOpt.exchSeg || selectedOpt.exch);
-          const latestPrice = data?.lastPrice || data?.data?.[0]?.ltp;
+          
+          // Show a loading indicator immediately if we don't have a price yet
+          setLtp(prev => prev ? prev : "..."); 
+
+          const data = await ApiClient.getPrice(selectedOpt.token, selectedOpt.exchSeg || selectedOpt.exch || "nse_fo");
+          
+          // Robustly extract the price based on Kotak's array response
+          const latestPrice = data?.data?.[0]?.ltp || data?.success?.[0]?.lastPrice || data?.[0]?.ltp;
           
           if (latestPrice) {
             setLtp(latestPrice);
+            // Auto-fill the price input if Market is selected
             if (priceType === "MKT") setPrice(latestPrice);
+          } else {
+            setLtp("N/A");
           }
         }
       } catch (err) {
         console.error("LTP Fetch error", err);
+        setLtp("Error");
       }
     };
 
+    // 1. Fetch immediately as soon as the dropdown changes
     fetchPrice();
-    const interval = setInterval(fetchPrice, 5000);
-    return () => clearInterval(interval);
-  }, [symbol, chainData, viewMode, priceType, suggestions]);
+
+  }, [symbol, chainData, viewMode, priceType]);
 
   // Filter option chain based on user input
   const filteredChain = chainData.filter(opt => 
