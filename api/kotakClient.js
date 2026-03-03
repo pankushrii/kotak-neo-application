@@ -126,27 +126,32 @@ async function placeOrder(uiPayload,session) {
   const url = `${baseUrl}/quick/order/rule/ms/place`;
 
   // Map UI payload to exact Kotak V2 requirements
-const jData = {
-    am: "NO",
-    dq: "0",
-    es: uiPayload.exchange_segment || "nse_fo", // nse_fo for options
-    mp: "0",
-    pc: uiPayload.product || "NRML",
-    pf: "N",
-    pr: "0",
-    pt: "MKT",
+// 1. Build the jData object exactly as per your working structure
+  const jData = {
+    am: 'NO',
+    dq: '0',
+    es: uiPayload.trading_symbol.includes("NIFTY") ? "nse_fo" : "nse_cm",
+    mp: '0',
+    pc: uiPayload.product || 'NRML',
+    pf: 'N',
+    pr: '0', // 0 for MKT orders
+    pt: 'MKT',
     qt: uiPayload.quantity.toString(),
-    rt: "DAY",
-    tp: "0",
+    rt: 'DAY',
+    tp: '0',
     ts: uiPayload.trading_symbol,
     tt: uiPayload.side === "BUY" ? "B" : "S", // 'B' or 'S'
-    sot: "Absolute",
-    slt: "Absolute",
-    slv: "0",
-    sov: "0",
-    tlt: "N",
-    tsv: "0"
   };
+
+  // 2. Handle Bracket Order (BO) fields if necessary
+  if (uiPayload.orderType === 'BO') {
+    jData.sot = 'LIMIT';
+    jData.slt = uiPayload.slt || 'Absolute';
+    jData.slv = uiPayload.slv || '0';
+    jData.sov = 'LIMIT';
+    jData.tlt = uiPayload.tlt || 'N';
+    jData.tsv = uiPayload.tsv || '0';
+  }
   // LOG 4: Check final headers being sent to Kotak
  // IMPORTANT: Wrap in jData and use URLSearchParams for x-www-form-urlencoded
   const params = new URLSearchParams();
