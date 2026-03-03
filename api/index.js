@@ -321,15 +321,34 @@ app.get("/api/positions", async (req, res) => {
     const session = getSessionFromReq(req);
     const headers = sessionHeadersOrThrow(session);
     
-    // Kotak Neo v2 Positions Endpoint
-    const url = `${session.baseUrl.replace(/\/$/, "")}/portfolio/v1/positions`;
+    // Construct and log the URL
+    const cleanBaseUrl = session.baseUrl.replace(/\/$/, "");
+    const url = `${cleanBaseUrl}/portfolio/v1/positions`;
     
+    console.log("📂 [Positions] Fetching from:", url);
+    // console.log("🔑 [Positions] Headers:", JSON.stringify(headers)); // Uncomment for deep auth debugging
+
     const response = await axios.get(url, { headers });
     
-    // Kotak returns positions in response.data.data or success
-    const positions = response.data?.data || response.data?.success || [];
+    // LOG: See the raw structure to find where 'positions' live
+    console.log("📥 [Positions] Raw Response Keys:", Object.keys(response.data));
+
+    // Kotak Neo sometimes uses 'data', sometimes 'success' inside a 'message'
+    const positions = response.data?.data || 
+                      response.data?.success || 
+                      response.data?.message || [];
+
+    console.log(`✅ [Positions] Successfully retrieved ${Array.isArray(positions) ? positions.length : 0} items.`);
+    
     res.json(positions);
   } catch (err) {
+    // Detailed Error Logging
+    if (err.response) {
+      console.error("❌ [Positions API Error] Status:", err.response.status);
+      console.error("❌ [Positions API Error] Body:", JSON.stringify(err.response.data));
+    } else {
+      console.error("❌ [Positions Local Error]:", err.message);
+    }
     res.status(500).json({ error: err.message });
   }
 });
