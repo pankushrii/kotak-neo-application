@@ -47,7 +47,7 @@ export const ApiClient = {
       .get("/option-chain", { params: { symbol: symbol,
                                       spotPrice: spotPrice} })
       .then((r) => r.data);
-  }
+  },
   getPrice(token, seg) {
     return api.get("/get-price", { params: { token, seg } }).then(r => r.data);
   }
