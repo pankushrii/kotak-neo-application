@@ -94,7 +94,7 @@ export function PlaceOrderForm({ onOrderPlaced }) {
     setMessage("");
     try {
       console.log("Placeing order on submit");
-      
+      alert("placeOrder from OrderForm");
       const res = await ApiClient.placeOrder({
         trading_symbol: symbol.trim(),
         quantity: Number(qty),
