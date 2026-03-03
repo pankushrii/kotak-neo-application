@@ -1,214 +1,375 @@
+/* ==========================================================================
+   CSS VARIABLES & THEME DEFINITION
+   ========================================================================== */
 :root {
-  --bg: #060b1a;
-  --panel: rgba(255, 255, 255, 0.04);
-  --border: rgba(255, 255, 255, 0.10);
-  --text: #e5e7eb;
-  --muted: #9ca3af;
-  --brand: #3b82f6;
-  --good: #22c55e;
-  --bad: #f97373;
-  --buy-bg: #166534;
-  --sell-bg: #991b1b;
+  /* Core Backgrounds */
+  --bg-app: #060b14;
+  --bg-card: #0f1423;
+  --bg-input: #1a2235;
+  --bg-hover: #232d45;
+  
+  /* Borders & Dividers */
+  --border-subtle: rgba(255, 255, 255, 0.08);
+  --border-focus: rgba(59, 130, 246, 0.6);
+  
+  /* Text Colors */
+  --text-main: #f8fafc;
+  --text-muted: #94a3b8;
+  
+  /* Brand & Status Colors */
+  --brand-blue: #3b82f6;
+  --brand-blue-hover: #2563eb;
+  --color-buy: #10b981; /* Vibrant Green */
+  --color-buy-hover: #059669;
+  --color-sell: #ef4444; /* Vibrant Red */
+  --color-sell-hover: #dc2626;
+  
+  /* Shadows */
+  --shadow-card: 0 10px 30px -10px rgba(0, 0, 0, 0.5);
+  --shadow-dropdown: 0 20px 25px -5px rgba(0, 0, 0, 0.8), 0 8px 10px -6px rgba(0, 0, 0, 0.5);
 }
 
-* { box-sizing: border-box; }
+/* ==========================================================================
+   GLOBAL RESET
+   ========================================================================== */
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
 
 body {
-  margin: 0;
-  font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial;
-  background: radial-gradient(1200px 800px at 20% 0%, rgba(59,130,246,0.18), transparent 55%),
-              radial-gradient(900px 600px at 80% 10%, rgba(34,197,94,0.10), transparent 55%),
-              var(--bg);
-  color: var(--text);
-  overflow-x: hidden;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  background-color: var(--bg-app);
+  background-image: 
+    radial-gradient(circle at 15% 0%, rgba(59, 130, 246, 0.08) 0%, transparent 40%),
+    radial-gradient(circle at 85% 100%, rgba(16, 185, 129, 0.05) 0%, transparent 40%);
+  background-attachment: fixed;
+  color: var(--text-main);
+  -webkit-font-smoothing: antialiased;
+  min-height: 100vh;
 }
 
-.app { min-height: 100vh; }
-
+/* ==========================================================================
+   LAYOUT & CONTAINERS
+   ========================================================================== */
 .container {
-  max-width: 1100px;
+  max-width: 1200px;
   margin: 0 auto;
-  padding: 10px; /* Reduced for mobile */
-}
-
-@media (min-width: 768px) {
-  .container { padding: 20px; }
-}
-
-/* TOPBAR */
-.topbar {
-  position: sticky;
-  top: 0;
-  z-index: 10;
-  backdrop-filter: blur(14px);
-  background: rgba(3, 7, 18, 0.65);
-  border-bottom: 1px solid var(--border);
-  padding: 10px 15px;
-  display: flex;
-  flex-direction: column; /* Stack on mobile */
-  gap: 10px;
-}
-
-@media (min-width: 600px) {
-  .topbar {
-    flex-direction: row;
-    justify-content: space-between;
-    padding: 14px 20px;
-  }
-}
-
-.brand-title { font-size: 18px; font-weight: 700; }
-.brand-subtitle { font-size: 11px; color: var(--muted); }
-
-/* FORMS & GRIDS */
-.form-grid {
-  display: grid;
-  grid-template-columns: 1fr; /* Default to single column for mobile */
-  gap: 12px;
-}
-
-@media (min-width: 600px) {
-  .form-grid { grid-template-columns: 1fr 1fr; }
-}
-
-@media (min-width: 1024px) {
-  /* Complex layout for Desktop */
-  .form-grid { 
-    grid-template-columns: 2fr 1fr 1fr 1fr; 
-  }
-}
-
-.form-row { 
-  display: flex; 
-  flex-direction: column; 
-  gap: 6px; 
-  position: relative;
-}
-
-/* SYMBOL SEARCH BOX */
-.suggest-box {
-  position: absolute;
-  top: 100%;
-  left: 0;
-  right: 0;
-  background: #0f172a;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  max-height: 200px;
-  overflow-y: auto;
-  z-index: 100;
-  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.5);
-}
-
-.suggest-item {
-  padding: 10px;
-  cursor: pointer;
-  border-bottom: 1px solid var(--border);
-  font-size: 13px;
-}
-
-.suggest-item:hover { background: rgba(255,255,255,0.05); }
-
-/* INPUTS */
-input, select {
-  padding: 12px;
-  border-radius: 10px;
-  border: 1px solid rgba(255,255,255,0.12);
-  background: rgba(2,6,23,0.45);
-  color: var(--text);
-  outline: none;
-  font-size: 14px; /* Better for mobile touch */
-  width: 100%;
-}
-
-input:disabled { opacity: 0.5; cursor: not-allowed; }
-input:focus, select:focus { border-color: var(--brand); }
-
-/* MODE TOGGLE (Trade/Options) */
-.mode-toggle {
-  display: flex;
-  background: rgba(255,255,255,0.05);
-  padding: 4px;
-  border-radius: 12px;
-  gap: 4px;
-}
-
-.mode-toggle button {
-  flex: 1;
-  padding: 6px 12px;
-  font-size: 12px;
-  background: transparent;
-  border: none;
-}
-
-.mode-toggle button.active {
-  background: var(--brand);
-  box-shadow: 0 2px 4px rgba(0,0,0,0.2);
-}
-
-/* CARDS */
-.card {
-  border: 1px solid var(--border);
-  background: var(--panel);
-  border-radius: 14px;
   padding: 16px;
-  box-shadow: 0 12px 35px rgba(0,0,0,0.25);
-  margin-bottom: 15px;
+}
+
+/* Dashboard Navigation Tabs (TRADE, POSITIONS, ORDERS) */
+.nav-tabs {
+  display: flex;
+  flex-direction: column; /* Stacked like the mobile screenshot */
+  gap: 8px;
+  margin-bottom: 20px;
+}
+
+.nav-btn {
+  background: var(--brand-blue);
+  color: white;
+  border: none;
+  padding: 14px;
+  border-radius: 8px;
+  font-weight: 600;
+  font-size: 14px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  cursor: pointer;
+  transition: background 0.2s;
+  text-align: center;
+}
+
+.nav-btn:hover {
+  background: var(--brand-blue-hover);
+}
+
+/* Desktop override for Nav Tabs */
+@media (min-width: 768px) {
+  .nav-tabs {
+    flex-direction: row;
+  }
+  .nav-btn {
+    background: var(--bg-card);
+    border: 1px solid var(--border-subtle);
+    color: var(--text-muted);
+    flex: 1; /* Equal width tabs */
+  }
+  .nav-btn.active {
+    background: rgba(59, 130, 246, 0.15);
+    border-color: var(--brand-blue);
+    color: var(--brand-blue);
+  }
+}
+
+/* ==========================================================================
+   MAIN CARD STYLING
+   ========================================================================== */
+.card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  padding: 20px;
+  box-shadow: var(--shadow-card);
+  position: relative;
 }
 
 .card-head {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  margin-bottom: 16px;
+  gap: 16px;
+  margin-bottom: 24px;
+  border-bottom: 1px solid var(--border-subtle);
+  padding-bottom: 16px;
 }
 
 @media (min-width: 600px) {
-  .card-head { flex-direction: row; justify-content: space-between; align-items: center; }
+  .card-head {
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+  }
 }
 
-/* BUTTONS */
-.btn-row { margin-top: 15px; }
-
-button {
-  width: 100%;
-  padding: 14px;
-  border-radius: 10px;
-  border: 1px solid rgba(255,255,255,0.1);
-  background: var(--brand);
+.card-head h2 {
+  font-size: 18px;
+  font-weight: 600;
   color: white;
-  cursor: pointer;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  transition: all 0.2s;
 }
 
-/* Side Specific Colors */
-button.buy { background-color: var(--good); border-color: #15803d; }
-button.buy:hover { background-color: #16a34a; }
+/* Search / Option Chain Toggle */
+.mode-toggle {
+  display: flex;
+  background: var(--bg-input);
+  padding: 4px;
+  border-radius: 8px;
+  border: 1px solid var(--border-subtle);
+}
 
-button.sell { background-color: var(--bad); border-color: #dc2626; }
-button.sell:hover { background-color: #ef4444; }
+.mode-toggle button {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  padding: 8px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s;
+  flex: 1;
+}
 
-/* MESSAGES */
-.message { 
-  margin-top: 12px; 
-  padding: 10px;
+.mode-toggle button:hover:not(.active) {
+  color: var(--text-main);
+}
+
+.mode-toggle button.active {
+  background: var(--brand-blue);
+  color: white;
+  box-shadow: 0 2px 8px rgba(59, 130, 246, 0.4);
+}
+
+/* ==========================================================================
+   FORM GRID & INPUTS
+   ========================================================================== */
+.form-grid {
+  display: grid;
+  grid-template-columns: 1fr; /* Mobile: Single column */
+  gap: 16px;
+}
+
+/* Tablet: 2 Columns */
+@media (min-width: 640px) {
+  .form-grid { grid-template-columns: 1fr 1fr; }
+  .symbol-field, .form-row:first-child { grid-column: span 2; } /* Make search bar span full width */
+}
+
+/* Desktop: 4 Columns (matches your UI perfectly) */
+@media (min-width: 1024px) {
+  .form-grid { grid-template-columns: 2fr 1fr 1fr 1fr; }
+  .symbol-field, .form-row:first-child { grid-column: span 1; }
+}
+
+.form-row {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  position: relative; /* For suggest-box positioning */
+}
+
+label {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-muted);
+  letter-spacing: 0.3px;
+}
+
+input, select {
+  width: 100%;
+  background: var(--bg-input);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-main);
+  padding: 12px 14px;
   border-radius: 8px;
   font-size: 14px;
-  text-align: center;
+  outline: none;
+  transition: border-color 0.2s, box-shadow 0.2s;
+  appearance: none; /* Removes native select styling */
 }
-.message.success { background: rgba(34, 197, 94, 0.1); color: var(--good); border: 1px solid rgba(34, 197, 94, 0.2); }
-.message.error { background: rgba(249, 115, 115, 0.1); color: var(--bad); border: 1px solid rgba(249, 115, 115, 0.2); }
 
-/* RESPONSIVE TABLES */
-.table-container {
+/* Custom dropdown arrow for selects */
+select {
+  background-image: url("data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22292.4%22%20height%3D%22292.4%22%3E%3Cpath%20fill%3D%22%2394a3b8%22%20d%3D%22M287%2069.4a17.6%2017.6%200%200%200-13-5.4H18.4c-5%200-9.3%201.8-12.9%205.4A17.6%2017.6%200%200%200%200%2082.2c0%205%201.8%209.3%205.4%2012.9l128%20127.9c3.6%203.6%207.8%205.4%2012.8%205.4s9.2-1.8%2012.8-5.4L287%2095c3.5-3.5%205.4-7.8%205.4-12.8%200-5-1.9-9.2-5.5-12.8z%22%2F%3E%3C%2Fsvg%3E");
+  background-repeat: no-repeat;
+  background-position: right 14px top 50%;
+  background-size: 10px auto;
+  padding-right: 32px;
+}
+
+input:focus, select:focus {
+  border-color: var(--brand-blue);
+  box-shadow: 0 0 0 1px var(--brand-blue);
+}
+
+input:disabled, select:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  background: rgba(0, 0, 0, 0.2);
+}
+
+/* ==========================================================================
+   AUTO-SUGGESTION BOX
+   ========================================================================== */
+.suggest-box {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  max-height: 250px;
+  overflow-y: auto;
+  z-index: 50;
+  box-shadow: var(--shadow-dropdown);
+}
+
+.suggest-item {
+  padding: 12px 14px;
+  cursor: pointer;
+  border-bottom: 1px solid var(--border-subtle);
+  font-size: 13px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  transition: background 0.15s;
+}
+
+.suggest-item:last-child {
+  border-bottom: none;
+}
+
+.suggest-item:hover {
+  background: var(--bg-hover);
+}
+
+.suggest-item small {
+  color: var(--text-muted);
+  font-size: 11px;
+  max-width: 50%;
+  text-align: right;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ==========================================================================
+   CALL TO ACTION BUTTONS
+   ========================================================================== */
+.btn-row {
+  margin-top: 24px;
+}
+
+.btn-row button {
   width: 100%;
-  overflow-x: auto; /* Horizontal scroll for small phones */
-  -webkit-overflow-scrolling: touch;
+  padding: 16px;
+  border-radius: 8px;
+  border: none;
+  font-size: 15px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: white;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
 }
 
-.table {
-  min-width: 600px; /* Ensures table data doesn't squish too much */
+/* Dynamic Side Colors */
+.btn-row button.buy {
+  background: var(--color-buy);
+}
+
+.btn-row button.buy:hover:not(:disabled) {
+  background: var(--color-buy-hover);
+  box-shadow: 0 4px 15px rgba(16, 185, 129, 0.4);
+}
+
+.btn-row button.sell {
+  background: var(--color-sell);
+}
+
+.btn-row button.sell:hover:not(:disabled) {
+  background: var(--color-sell-hover);
+  box-shadow: 0 4px 15px rgba(239, 68, 68, 0.4);
+}
+
+.btn-row button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+/* ==========================================================================
+   MESSAGES & ALERTS
+   ========================================================================== */
+.message {
+  margin-top: 16px;
+  padding: 12px 16px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.message.success {
+  background: rgba(16, 185, 129, 0.1);
+  border: 1px solid rgba(16, 185, 129, 0.2);
+  color: var(--color-buy);
+}
+
+.message.error {
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.2);
+  color: var(--color-sell);
+}
+
+/* Scrollbar Styling for webkit */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: var(--bg-app);
+}
+::-webkit-scrollbar-thumb {
+  background: #334155;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #475569;
 }
