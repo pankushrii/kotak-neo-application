@@ -158,23 +158,22 @@ async function placeOrder(uiPayload,session) {
   }).toString();
 
   // --- LOGGING HEADERS ---
-  const headers = {
+  const headers_const = {
     "Content-Type": "application/x-www-form-urlencoded",
     "Accept": "application/json",
     "neo-fin-key": "neotradeapi",
     "Auth": session.sessionToken,
-    "Sid": session.sessionSid || "",
-    "Content-Length": Buffer.byteLength(encodedBody).toString()
+    "Sid": session.sessionSid || ""
   };
 
-  console.log("📤 [OUTGOING HEADERS]:", JSON.stringify(headers, null, 2));
-  console.log("📦 [OUTGOING BODY]:", encodedBody);
+  console.log("📤 [OUTGOING HEADERS]:", JSON.stringify(headers_const, null, 2));
+  console.log("📦 [OUTGOING BODY]:", formBody);
   console.log("🚀 [Kotak Client]: Sending jData:", JSON.stringify(jData));
   console.log('🚀 [Kotak Client] Sending formBody:', formBody);
 
   try {
     const res = await axios.post(url, formBody, { 
-      headers: headers
+      headers: headers_const
     });
     return res.data;
   } catch (err) {
