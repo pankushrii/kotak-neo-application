@@ -418,4 +418,25 @@ app.get("/api/positions", async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+
+app.get("/api/debug-cache", async (req, res) => {
+  try {
+    const session = getSessionFromReq(req);
+    // Force a fresh fetch if you want to be 100% sure
+    const cache = await fetchMasterScripCsvAndCache(false, session, true);
+    
+    // Slice the first 10 rows
+    const firstTen = cache.rows.slice(0, 10);
+    
+    console.log("🐞 [Debug] Total Rows in Cache:", cache.rows.length);
+    console.log("🐞 [Debug] Sample Rows:", firstTen);
+
+    res.json({
+      totalRows: cache.rows.length,
+      sample: firstTen
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
 module.exports = app;
