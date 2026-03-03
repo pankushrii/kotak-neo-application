@@ -226,4 +226,23 @@ app.post("/api/get-strike-prices", async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+
+// Ensure this specific route exists
+app.post("/api/orders", async (req, res) => {
+  try {
+    const session = getSessionFromReq(req);
+    const orderData = req.body; // {trading_symbol, quantity, side, product}
+
+    console.log("📦 [API]: Placing order for", orderData.trading_symbol);
+    
+    // Call your Kotak Client logic
+    const result = await placeOrder(orderData, session);
+    console.log("📦 [API]: Placing order Results", result);
+    res.json(result);
+  } catch (err) {
+    console.log("[Order Error]", err.message);
+    console.error("❌ [Order Error]:", err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
 module.exports = app;
