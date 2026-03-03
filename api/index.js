@@ -186,10 +186,12 @@ app.get("/api/option-chain", async (req, res) => {
 app.post("/api/auth/login", async (req, res) => {
   try {
     const data = await loginWithTotp(req.body.totp);
+    console.log("Data while login",data);
     const opt = { httpOnly: true, secure: true, sameSite: "none", maxAge: 24 * 60 * 60 * 1000 };
     // res.cookie("sessionToken", data.sessionToken, opt);
     res.cookie("sessionToken", data.token || data.sessionToken, opt);
     res.cookie("baseUrl", data.baseUrl, opt);
+    res.cookie("sessionSid", data.sid || "none", opt);
     if (data.sessionSid) res.cookie("sessionSid", data.sessionSid, opt);
     res.json({ success: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
