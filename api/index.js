@@ -210,32 +210,36 @@ app.get("/api/option-chain", async (req, res) => {
     const range = 2000;
     const today = new Date();
     today.setHours(0, 0, 0, 0);
+const processed = cache.rows.map((r) => {
+  const rowName = (r.name || "").toString().toUpperCase();
+  const targetName = symbol.toUpperCase(); // e.g., "NIFTY"
 
-    const processed = cache.rows.map((r) => {
-      // 1. Try to find the name in multiple possible keys
-      const rowName = (r.name || r.pSymbolName || "").toString().trim().toUpperCase();
-      const targetName = symbol.trim().toUpperCase();
-      
-      // 2. Try to find the token/scrip string in multiple possible keys
-      const scripStr = (r.token || r.pScripRefKey || r.trdSymbol || "").toString().toUpperCase();
+  // 1. IMPROVED NAME CHECK:
+  // This ensures "NIFTY" matches "NIFTY", but also handles potential 
+  // hidden spaces or variations like "NIFTY 50"
+  const isMatch = rowName === targetName || 
+                  (targetName === "NIFTY" && rowName === "NIFTY 50") ||
+                  (targetName === "BANKNIFTY" && rowName === "NIFTY BANK");
 
-      if (rowName !== targetName) return null;
+  if (!isMatch) return null;
 
-      // 3. Flexible Regex for Strike: Looking for numbers before CE/PE
-      const strikeMatch = scripStr.match(/(\d+)(?:\.\d+)?(CE|PE)$/);
-      if (!strikeMatch) return null;
+  // 2. The Token/Strike logic
+  const scripStr = (r.token || r.trdSymbol || "").toString().toUpperCase();
+  
+  // Regex needs to handle the Index name at the start
+  const strikeMatch = scripStr.match(/(\d+)(?:\.\d+)?(CE|PE)$/);
+  if (!strikeMatch) return null;
 
-      const strikeValue = parseFloat(strikeMatch[1]);
-      if (strikeValue < (spot - range) || strikeValue > (spot + range)) return null;
+  const strikeValue = parseFloat(strikeMatch[1]);
+  if (strikeValue < (spot - range) || strikeValue > (spot + range)) return null;
 
-      return {
-        ...r,
-        strike: strikeValue,
-        type: strikeMatch[2],
-        dateObj: parseExpiryFromToken(scripStr),
-        scripStr // useful for debugging
-      };
-    }).filter(Boolean);
+  return {
+    ...r,
+    strike: strikeValue,
+    type: strikeMatch[2],
+    dateObj: parseExpiryFromToken(scripStr)
+  };
+}).filter(Boolean);
 
     console.log(`✅ [Step 1] Matches after Name/Strike filter: ${processed.length}`);
 
