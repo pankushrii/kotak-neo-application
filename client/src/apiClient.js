@@ -50,14 +50,14 @@ export const ApiClient = {
                                       spotPrice: spotPrice} })
       .then((r) => r.data);
   },
-  getPrice(token, seg) {
-    return api.post("/get-strike-prices", {
-      instrumentTokens: [
-        { 
-          instrument_token: String(token), 
-          exchange_segment: seg || "nse_fo" 
-        }
-      ]
-    }).then(r => r.data);
+ getPrice(pSymbol, seg = "nse_fo") {
+    return api
+      .get("/get-ltp", { 
+        params: { 
+          pSymbol: pSymbol, 
+          exchange: seg 
+        } 
+      })
+      .then((r) => r.data);
   }
 };
