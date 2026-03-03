@@ -67,50 +67,44 @@ export function PlaceOrderForm({ onOrderPlaced }) {
     fetchChain();
   }, [optionIndex, viewMode, spotPrice]);
 
-  // 3. Live LTP Fetching (Fetches ONCE on selection change)
+// 3. Live LTP Fetching
   useEffect(() => {
-    console.log("🔄 [useEffect Triggered] Current symbol state:", symbol);
-    
     if (!symbol) {
-      console.log("⚠️ Symbol is empty. Waiting for user to select a strike.");
       setLtp(null);
       setPrice("");
       return;
     }
-    
-  
-      const fetchPrice = async () => {
-  try {
-    const selectedOpt = viewMode === "OPTION_CHAIN" 
-      ? chainData.find(o => o.trdSymbol === symbol) 
-      : suggestions.find(o => o.trdSymbol === symbol);
 
-    if (!selectedOpt || !selectedOpt.pSymbol) {
-      console.warn("⚠️ No pSymbol found for selection");
-      return;
-    }
+    const fetchPrice = async () => {
+      try {
+        const selectedOpt = viewMode === "OPTION_CHAIN" 
+          ? chainData.find(o => o.trdSymbol === symbol) 
+          : suggestions.find(o => o.trdSymbol === symbol);
 
-    setLtp("...");
-    
-    // Switch to GET request with query params
-    const res = await ApiClient.getPrice(selectedOpt.pSymbol, selectedOpt.exchSeg || "nse_fo");
-    
-    // Parse the nested price (adjust based on actual API response structure)
-    const latestPrice = res?.data?.[0]?.ltp || res?.success?.[0]?.lastPrice || res?.[0]?.ltp;
+        if (!selectedOpt || !selectedOpt.pSymbol) {
+          console.warn("⚠️ No pSymbol found for selection");
+          return;
+        }
 
-    if (latestPrice) {
-      setLtp(latestPrice);
-      setPrice(latestPrice);
-    }
-  } catch (err) {
-    setLtp("Error");
-  }
-};
+        setLtp("...");
+        const res = await ApiClient.getPrice(selectedOpt.pSymbol, selectedOpt.exchSeg || "nse_fo");
+        
+        // Extracting from Kotak's success[0].ltp structure
+        const latestPrice = res?.success?.[0]?.ltp || res?.data?.[0]?.ltp || res?.[0]?.ltp;
+
+        if (latestPrice) {
+          setLtp(latestPrice);
+          setPrice(latestPrice);
+        } else {
+          setLtp("N/A");
+        }
+      } catch (err) {
+        setLtp("Error");
+      }
     };
 
     fetchPrice();
-    
-  }, [symbol, chainData, viewMode]);
+  }, [symbol, chainData, suggestions, viewMode]);
 
   const filteredChain = chainData.filter(opt => 
     opt.trdSymbol.toLowerCase().includes(strikeFilter.toLowerCase())
